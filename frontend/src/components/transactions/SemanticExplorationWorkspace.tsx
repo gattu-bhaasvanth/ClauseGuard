@@ -56,13 +56,12 @@ export function SemanticExplorationWorkspace({
   const [showAllEvidence, setShowAllEvidence] = useState(false);
 
   const handleSearch = async (questionToAsk?: string) => {
-    const q = (questionToAsk || query).trim();
+    const textToQuery = typeof questionToAsk === "string" ? questionToAsk : query;
+    const q = textToQuery.trim();
     if (!q || isLoading) return;
 
-    if (questionToAsk) {
-      setQuery(questionToAsk);
-    }
-
+    // Explicitly populate and retain the query in the input
+    setQuery(textToQuery);
     setIsLoading(true);
     setError(null);
 
@@ -74,6 +73,11 @@ export function SemanticExplorationWorkspace({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSelectSuggestedQuery = (suggestedText: string) => {
+    setQuery(suggestedText);
+    handleSearch(suggestedText);
   };
 
   const handleCitationClick = (citation: RAGCitation) => {
@@ -142,7 +146,7 @@ export function SemanticExplorationWorkspace({
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Ask a question about handover dates, penalty rates, carpet area, payment terms..."
               className="w-full bg-surface-base border border-surface-border rounded-lg pl-10 pr-4 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 transition-all font-sans"
-              disabled={isLoading}
+              readOnly={isLoading}
               autoFocus={autoFocusInput}
               data-testid="rag-query-input"
             />
@@ -178,9 +182,11 @@ export function SemanticExplorationWorkspace({
           {SUGGESTED_QUERIES.map((sq, idx) => (
             <button
               key={idx}
-              onClick={() => handleSearch(sq)}
+              type="button"
+              data-testid={`suggested-query-${idx}`}
+              onClick={() => handleSelectSuggestedQuery(sq)}
               disabled={isLoading}
-              className="text-[11px] px-2.5 py-1 rounded-full bg-surface-subtle hover:bg-zinc-800 text-zinc-300 hover:text-white border border-surface-border hover:border-emerald-500/40 transition-all whitespace-nowrap"
+              className="text-[11px] px-2.5 py-1 rounded-full bg-surface-subtle hover:bg-zinc-800 text-zinc-300 hover:text-white border border-surface-border hover:border-emerald-500/40 transition-all whitespace-nowrap cursor-pointer"
             >
               {sq}
             </button>

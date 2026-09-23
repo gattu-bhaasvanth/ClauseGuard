@@ -154,4 +154,57 @@ describe("Phase 8 Frontend RAG UI Integration Tests", () => {
       "api.ts must target /rag/chunks endpoint"
     );
   });
+
+  test("5. Clicking a suggested question chip populates the query input and triggers the RAG query flow", () => {
+    const workspacePath = path.join(
+      frontendRoot,
+      "src",
+      "components",
+      "transactions",
+      "SemanticExplorationWorkspace.tsx"
+    );
+    const content = fs.readFileSync(workspacePath, "utf-8");
+
+    // 1. Explicit handler that populates input and triggers query
+    assert.ok(
+      content.includes("handleSelectSuggestedQuery"),
+      "Workspace must define handleSelectSuggestedQuery"
+    );
+    assert.ok(
+      content.includes("setQuery(suggestedText)"),
+      "handleSelectSuggestedQuery must populate query state"
+    );
+    assert.ok(
+      content.includes("handleSearch(suggestedText)"),
+      "handleSelectSuggestedQuery must trigger query search"
+    );
+
+    // 2. Suggested query button binds handleSelectSuggestedQuery and testid
+    assert.ok(
+      content.includes("data-testid={`suggested-query-${idx}`}"),
+      "Suggested query chips must define deterministic testids"
+    );
+    assert.ok(
+      content.includes("onClick={() => handleSelectSuggestedQuery(sq)}"),
+      "Suggested query chips must call handleSelectSuggestedQuery with question string"
+    );
+    assert.ok(
+      content.includes("type=\"button\""),
+      "Suggested query chips must have type='button'"
+    );
+
+    // 3. Input element maintains readOnly during load and keeps value bound to query state
+    assert.ok(
+      content.includes("readOnly={isLoading}"),
+      "Input element must use readOnly={isLoading} so text remains crisp and visible"
+    );
+    assert.ok(
+      content.includes("value={query}"),
+      "Input element must remain bound to query state while answer is displayed"
+    );
+    assert.ok(
+      content.includes("setQuery(textToQuery)"),
+      "handleSearch must explicitly preserve textToQuery in state for answer view"
+    );
+  });
 });
