@@ -14,6 +14,7 @@ const config: Config = {
         foreground: "#f4f4f5",
         surface: {
           DEFAULT: "#121215",
+          base: "#0f0f12",
           subtle: "#18181b",
           hover: "#222226",
           border: "#27272a",

@@ -149,14 +149,14 @@ export function SemanticExplorationWorkspace({
           className="flex items-center gap-2"
         >
           <div className="relative flex-1">
-            <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               ref={inputRef}
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Ask a question about handover dates, penalty rates, carpet area, payment terms..."
-              className="w-full bg-surface-base border border-surface-border rounded-lg pl-10 pr-4 py-2.5 text-xs sm:text-sm text-white font-medium placeholder:text-zinc-500 placeholder:font-normal read-only:text-white read-only:bg-surface-base focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 transition-all font-sans"
+              className="w-full bg-white border border-zinc-300 rounded-lg pl-10 pr-4 py-2.5 text-xs sm:text-sm text-zinc-900 font-medium placeholder:text-zinc-500 placeholder:font-normal read-only:bg-white read-only:text-zinc-900 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-sans shadow-sm"
               readOnly={isLoading}
               autoFocus={autoFocusInput}
               data-testid="rag-query-input"

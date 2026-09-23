@@ -281,17 +281,27 @@ describe("Phase 8 Frontend RAG UI Integration Tests", () => {
     assert.ok(inputMatch, "Must find input element with className");
     const inputClasses = inputMatch[1];
 
-    // Populated value styling: bright high-contrast text and medium weight
+    // 1. Explicit white input background
     assert.ok(
-      inputClasses.includes("text-white"),
-      "Populated text must use text-white for high contrast"
+      inputClasses.includes("bg-white"),
+      "Input element must have explicit bg-white background"
+    );
+
+    // 2. High-contrast dark text for populated value against white background
+    assert.ok(
+      inputClasses.includes("text-zinc-900"),
+      "Populated text must use text-zinc-900 for dark high contrast against white input"
+    );
+    assert.ok(
+      !inputClasses.includes("text-white"),
+      "Must NOT use text-white which would cause white-on-white invisibility"
     );
     assert.ok(
       inputClasses.includes("font-medium"),
       "Populated text must use font-medium (500 weight)"
     );
 
-    // Placeholder styling: muted gray and normal weight
+    // 3. Placeholder styling: muted gray and normal weight
     assert.ok(
       inputClasses.includes("placeholder:text-zinc-500"),
       "Placeholder must use muted zinc-500 gray"
@@ -301,21 +311,20 @@ describe("Phase 8 Frontend RAG UI Integration Tests", () => {
       "Placeholder must use normal weight"
     );
 
-    // Read-only state: ensures value does not get dimmed during loading
+    // 4. Read-only state: ensures value does not get dimmed or flipped during loading
     assert.ok(
-      inputClasses.includes("read-only:text-white"),
-      "Read-only state must maintain text-white without opacity dimming"
+      inputClasses.includes("read-only:bg-white"),
+      "Read-only state must maintain bg-white"
+    );
+    assert.ok(
+      inputClasses.includes("read-only:text-zinc-900"),
+      "Read-only state must maintain text-zinc-900 without opacity dimming"
     );
 
-    // Ensure no accidental base classes that would make actual text look like placeholder
-    const classList = inputClasses.split(/\s+/);
+    // 5. Border definition
     assert.ok(
-      !classList.includes("text-zinc-500"),
-      "Actual text must not be styled with standalone text-zinc-500"
-    );
-    assert.ok(
-      !classList.includes("text-zinc-400"),
-      "Actual text must not be styled with standalone text-zinc-400"
+      inputClasses.includes("border-zinc-300"),
+      "Input must use clear border-zinc-300"
     );
   });
 });
