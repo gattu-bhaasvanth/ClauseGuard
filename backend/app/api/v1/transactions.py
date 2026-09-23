@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.schemas.transaction import (
@@ -14,12 +14,18 @@ from app.schemas.matrix import (
     ComparisonMatrixResponseSchema,
     TransactionAnalysisResponseSchema,
 )
+from app.schemas.report import (
+    TransactionAuditReportSchema,
+    DocumentChecklistItemSchema,
+)
 from app.models.document import Document
 from app.models.attribute import ExtractedAttribute
 from app.services import transaction_service
 from app.intelligence.metadata_engine import metadata_engine
 from app.intelligence.cross_doc_engine import cross_document_engine
 from app.intelligence.alignment_matrix import alignment_matrix_builder
+from app.intelligence.document_checklist import document_checklist_auditor
+from app.reports.report_service import report_service
 from sqlalchemy import select
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
@@ -159,4 +165,72 @@ async def get_transaction_comparison_matrix(
         documents=documents,
         attributes=attributes,
     )
+
+
+@router.get("/{transaction_id}/report", response_model=TransactionAuditReportSchema)
+async def get_transaction_audit_report(
+    transaction_id: str, db: AsyncSession = Depends(get_db)
+):
+    """
+    Retrieve comprehensive Transaction Audit Report in structured JSON format,
+    including executive summary, document checklist, discrepancy table, and category risk indices.
+    """
+    bundle = await transaction_service.get_transaction_by_id(db, transaction_id)
+    if not bundle:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transaction with ID '{transaction_id}' not found.",
+        )
+    return await report_service.build_audit_report(session=db, bundle_id=transaction_id)
+
+
+@router.get("/{transaction_id}/report/pdf")
+async def download_transaction_audit_report_pdf(
+    transaction_id: str, db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate and stream an exportable vector-quality PDF Transaction Audit Report
+    complete with headers, health score badge, evidence citations, and statutory disclaimers.
+    """
+    bundle = await transaction_service.get_transaction_by_id(db, transaction_id)
+    if not bundle:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transaction with ID '{transaction_id}' not found.",
+        )
+
+    pdf_bytes = await report_service.generate_audit_report_pdf(
+        session=db, bundle_id=transaction_id
+    )
+
+    filename = f"ClauseGuard_Audit_Report_{transaction_id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Type": "application/pdf",
+        },
+    )
+
+
+@router.get("/{transaction_id}/checklist", response_model=List[DocumentChecklistItemSchema])
+async def get_transaction_document_checklist(
+    transaction_id: str, db: AsyncSession = Depends(get_db)
+):
+    """
+    Audit the bundle's document inventory against statutory real-estate document sets
+    (Builder-Buyer Agreement, Allotment Letter, Payment Schedule, Sanction Plan, RERA Certificate).
+    """
+    bundle = await transaction_service.get_transaction_by_id(db, transaction_id)
+    if not bundle:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transaction with ID '{transaction_id}' not found.",
+        )
+
+    res_docs = await db.execute(select(Document).filter_by(bundle_id=transaction_id))
+    documents = res_docs.scalars().all()
+
+    return document_checklist_auditor.audit_documents(documents)
 
