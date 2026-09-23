@@ -214,3 +214,55 @@ async def test_rag_api_endpoints(client, db_session):
         json={"query": "Any query"},
     )
     assert bad_resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_rag_ui_contract_and_suggested_queries(client, db_session):
+    """
+    Verify that the RAG endpoint satisfies the exact JSON contract required by
+    the frontend SemanticExplorationWorkspace and tests standard suggested queries.
+    """
+    ui_suggested_queries = [
+        ("What is the penalty if the builder delays handover?", "8.2"),
+        ("What is the interest rate on delayed installment payment?", "5.3"),
+        ("What variation in carpet area is allowed without price adjustment?", "4.1"),
+    ]
+
+    for question, expected_clause in ui_suggested_queries:
+        resp = await client.post(
+            "/api/v1/transactions/skyview-a1204/rag/query",
+            json={"query": question, "topK": 5},
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+
+        # Contract fields required by types/rag.ts
+        assert "query" in payload
+        assert "answer" in payload
+        assert "grounded" in payload
+        assert "status" in payload
+        assert "confidence" in payload
+        assert "citations" in payload
+        assert "bundleId" in payload
+        assert "disclaimer" in payload
+
+        assert payload["grounded"] is True
+        assert payload["status"] == "GROUNDED"
+        assert payload["confidence"] > 0.3
+        assert len(payload["citations"]) > 0
+
+        # Verify citation contract fields for SourceEvidenceModal
+        top_cit = payload["citations"][0]
+        assert "documentId" in top_cit
+        assert "documentName" in top_cit
+        assert "documentType" in top_cit
+        assert "pageNumber" in top_cit
+        assert "clauseNumber" in top_cit
+        assert "clauseTitle" in top_cit
+        assert "excerpt" in top_cit
+        assert "relevanceScore" in top_cit
+        assert top_cit["relevanceScore"] >= 0.0
+
+        # Verify expected clause was retrieved in citations
+        all_clauses = [c.get("clauseNumber", "") for c in payload["citations"]]
+        assert any(expected_clause in cl for cl in all_clauses)

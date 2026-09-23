@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Eye,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { MOCK_SKYVIEW_TRANSACTION } from "@/mock/demoData";
 import { PropertySummaryCard } from "@/components/transactions/PropertySummaryCard";
@@ -22,6 +23,7 @@ import { RiskCard } from "@/components/transactions/RiskCard";
 import { ObligationTimeline } from "@/components/transactions/ObligationTimeline";
 import { DocumentTable } from "@/components/documents/DocumentTable";
 import { TransactionHealthScore } from "@/components/dashboard/TransactionHealthScore";
+import { SemanticExplorationWorkspace } from "@/components/transactions/SemanticExplorationWorkspace";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { SeverityBadge } from "@/components/shared/SeverityBadge";
@@ -34,7 +36,7 @@ export default function TransactionOverviewPage({
 }) {
   const transaction = MOCK_SKYVIEW_TRANSACTION;
   const [activeTab, setActiveTab] = useState<
-    "inconsistencies" | "risks" | "timeline" | "documents"
+    "inconsistencies" | "risks" | "timeline" | "documents" | "rag"
   >("inconsistencies");
 
   return (
@@ -60,6 +62,15 @@ export default function TransactionOverviewPage({
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
+          <Button
+            variant={activeTab === "rag" ? "emerald" : "secondary"}
+            size="sm"
+            onClick={() => setActiveTab("rag")}
+            className="gap-1.5 text-xs shadow-subtle-glow"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Ask ClauseGuard</span>
+          </Button>
           <Link href={`/dashboard/transactions/${transaction.id}/analysis`}>
             <Button variant="emerald" size="sm" className="gap-1.5 text-xs shadow-subtle-glow">
               <Eye className="w-3.5 h-3.5" />
@@ -138,6 +149,12 @@ export default function TransactionOverviewPage({
         {/* Tab Headers */}
         <div className="flex items-center gap-2 border-b border-surface-border pb-1 overflow-x-auto">
           {[
+            {
+              id: "rag",
+              label: "Ask ClauseGuard (RAG)",
+              icon: Sparkles,
+              highlight: true,
+            },
             {
               id: "inconsistencies",
               label: `Potential Inconsistencies (${transaction.inconsistenciesCount})`,
@@ -251,6 +268,11 @@ export default function TransactionOverviewPage({
             documents={transaction.documents}
             transactionId={transaction.id}
           />
+        )}
+
+        {/* Tab 5: Semantic Exploration / RAG Workspace */}
+        {activeTab === "rag" && (
+          <SemanticExplorationWorkspace transactionId={transaction.id} />
         )}
       </div>
 
