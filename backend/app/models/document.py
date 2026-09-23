@@ -25,6 +25,7 @@ class Document(Base):
     pages = relationship("DocumentPage", back_populates="document", cascade="all, delete-orphan", lazy="selectin")
     clauses = relationship("Clause", back_populates="document", cascade="all, delete-orphan", lazy="selectin")
     extracted_attributes = relationship("ExtractedAttribute", back_populates="document", cascade="all, delete-orphan", lazy="selectin")
+    chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan", lazy="selectin")
 
 
 class DocumentPage(Base):

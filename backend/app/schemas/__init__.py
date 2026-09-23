@@ -18,6 +18,13 @@ from app.schemas.finding import (
     RiskResponseSchema,
 )
 
+from app.schemas.rag import (
+    RAGQueryRequestSchema,
+    RAGQueryResponseSchema,
+    DocumentIndexingStatusSchema,
+    ChunkResponseSchema,
+)
+
 __all__ = [
     "TransactionCreateSchema",
     "TransactionListItemSchema",
@@ -32,4 +39,8 @@ __all__ = [
     "FindingResponseSchema",
     "InconsistencyResponseSchema",
     "RiskResponseSchema",
+    "RAGQueryRequestSchema",
+    "RAGQueryResponseSchema",
+    "DocumentIndexingStatusSchema",
+    "ChunkResponseSchema",
 ]

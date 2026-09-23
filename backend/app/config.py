@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     # Storage & Processing
     STORAGE_LOCAL_DIR: str = "./data/uploads"
     PROCESSED_DATA_DIR: str = "./data/processed"
+    FASTEMBED_CACHE_DIR: str = "./data/embeddings/fastembed"
+
+    # Embedding & RAG Settings (Phase 8)
+    EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
+    EMBEDDING_DIM: int = 384
 
     # LLM Settings
     LLM_PROVIDER: str = "gemini"

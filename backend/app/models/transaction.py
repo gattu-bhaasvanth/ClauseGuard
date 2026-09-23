@@ -40,3 +40,4 @@ class TransactionBundle(Base):
     clauses = relationship("Clause", back_populates="bundle", cascade="all, delete-orphan", lazy="selectin")
     findings = relationship("Finding", back_populates="bundle", cascade="all, delete-orphan", lazy="selectin")
     extracted_attributes = relationship("ExtractedAttribute", back_populates="bundle", cascade="all, delete-orphan", lazy="selectin")
+    chunks = relationship("DocumentChunk", back_populates="bundle", cascade="all, delete-orphan", lazy="selectin")
