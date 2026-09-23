@@ -9,7 +9,9 @@ from app.schemas.transaction import (
 )
 from app.schemas.clause import ClauseResponseSchema
 from app.schemas.finding import InconsistencyResponseSchema, RiskResponseSchema
+from app.schemas.attribute import UnifiedTransactionMetadataSchema
 from app.services import transaction_service
+from app.intelligence.metadata_engine import metadata_engine
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -70,3 +72,20 @@ async def get_transaction_findings(
         "risks": bundle.risks,
         "totalIssues": bundle.issuesCount,
     }
+
+
+@router.get("/{transaction_id}/metadata", response_model=UnifiedTransactionMetadataSchema)
+async def get_transaction_unified_metadata(
+    transaction_id: str, db: AsyncSession = Depends(get_db)
+):
+    """Retrieve synthesized bundle-level Unified Transaction Model across all extracted attributes."""
+    bundle = await transaction_service.get_transaction_by_id(db, transaction_id)
+    if not bundle:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transaction with ID '{transaction_id}' not found.",
+        )
+    return await metadata_engine.get_unified_transaction_metadata(
+        session=db, bundle_id=transaction_id
+    )
+

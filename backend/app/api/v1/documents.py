@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models.document import Document, DocumentPage
 from app.models.clause import Clause
+from app.models.attribute import ExtractedAttribute
 from app.schemas.document import (
     DocumentResponseSchema,
     DocumentCreateSchema,
@@ -12,9 +13,14 @@ from app.schemas.document import (
     DocumentIngestionResponseSchema,
 )
 from app.schemas.clause import ClauseResponseSchema
+from app.schemas.attribute import (
+    ExtractedAttributeSchema,
+    DocumentMetadataResponseSchema,
+)
 from app.services import transaction_service
 from app.ingestion.pipeline import ingestion_pipeline
 from app.intelligence.clause_engine import clause_intelligence_engine
+from app.intelligence.metadata_engine import metadata_engine
 
 router = APIRouter(prefix="/transactions/{transaction_id}/documents", tags=["Documents"])
 
@@ -95,9 +101,12 @@ async def upload_and_ingest_document(
         document_type=document_type,
     )
 
-    # Auto extract clauses if requested
+    # Auto extract clauses and metadata if requested
     if auto_extract_clauses:
         await clause_intelligence_engine.process_document_clauses(
+            session=db, bundle_id=transaction_id, document_id=result.document_id
+        )
+        await metadata_engine.process_document_metadata(
             session=db, bundle_id=transaction_id, document_id=result.document_id
         )
 
@@ -227,3 +236,90 @@ async def get_document_clauses(
         )
         for c in clauses
     ]
+
+
+@router.post(
+    "/{document_id}/extract-metadata",
+    response_model=DocumentMetadataResponseSchema,
+)
+async def extract_document_metadata(
+    transaction_id: str,
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Extracts structured real-estate parameters (carpet area, price, timelines, parties)
+    from document pages and segmented clauses.
+    """
+    doc_result = await db.execute(select(Document).filter_by(id=document_id))
+    doc = doc_result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document with ID '{document_id}' not found.",
+        )
+
+    attrs = await metadata_engine.process_document_metadata(
+        session=db, bundle_id=transaction_id, document_id=document_id
+    )
+
+    return DocumentMetadataResponseSchema(
+        documentId=document_id,
+        bundleId=transaction_id,
+        attributeCount=len(attrs),
+        attributes=[
+            ExtractedAttributeSchema(
+                id=a.id,
+                documentId=a.document_id,
+                bundleId=a.bundle_id,
+                attributeKey=a.attribute_key,
+                attributeValue=a.attribute_value,
+                normalizedValue=a.normalized_value or "",
+                unit=a.unit or "",
+                sourcePage=a.source_page or 1,
+                sourceClause=a.source_clause,
+                rawExcerpt=a.raw_excerpt,
+                confidence=a.confidence or 1.0,
+            )
+            for a in attrs
+        ],
+    )
+
+
+@router.get(
+    "/{document_id}/metadata",
+    response_model=DocumentMetadataResponseSchema,
+)
+async def get_document_metadata(
+    transaction_id: str,
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Retrieve extracted metadata attributes for a specific document."""
+    res = await db.execute(
+        select(ExtractedAttribute)
+        .filter_by(document_id=document_id)
+        .order_by(ExtractedAttribute.source_page.asc())
+    )
+    attrs = res.scalars().all()
+    return DocumentMetadataResponseSchema(
+        documentId=document_id,
+        bundleId=transaction_id,
+        attributeCount=len(attrs),
+        attributes=[
+            ExtractedAttributeSchema(
+                id=a.id,
+                documentId=a.document_id,
+                bundleId=a.bundle_id,
+                attributeKey=a.attribute_key,
+                attributeValue=a.attribute_value,
+                normalizedValue=a.normalized_value or "",
+                unit=a.unit or "",
+                sourcePage=a.source_page or 1,
+                sourceClause=a.source_clause,
+                rawExcerpt=a.raw_excerpt,
+                confidence=a.confidence or 1.0,
+            )
+            for a in attrs
+        ],
+    )

@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Integer, Text, ForeignKey
+from sqlalchemy import Column, String, Integer, Float, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -16,6 +16,9 @@ class ExtractedAttribute(Base):
     unit = Column(String(50), default="")  # e.g. "sq.ft", "INR"
     source_page = Column(Integer, default=1)
     source_clause = Column(String(50), nullable=True)
+    raw_excerpt = Column(Text, nullable=True)
+    confidence = Column(Float, default=1.0)
 
     # Relationships
     bundle = relationship("TransactionBundle", back_populates="extracted_attributes")
+    document = relationship("Document", back_populates="extracted_attributes")
