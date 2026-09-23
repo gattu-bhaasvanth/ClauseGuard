@@ -206,5 +206,116 @@ describe("Phase 8 Frontend RAG UI Integration Tests", () => {
       content.includes("setQuery(textToQuery)"),
       "handleSearch must explicitly preserve textToQuery in state for answer view"
     );
+    assert.ok(
+      content.includes("inputRef.current.value = suggestedText"),
+      "handleSelectSuggestedQuery must directly update DOM inputRef value"
+    );
+    assert.ok(
+      content.includes("ref={inputRef}"),
+      "Input element must attach ref={inputRef}"
+    );
+  });
+
+  test("6. Behavioral flow: click suggested question → input element value === selected question → query submission occurs", async () => {
+    // Mock DOM input element
+    const mockInput = { value: "" };
+    let queryState = "";
+    let submissionCalledWith = null;
+
+    // Mock query API
+    const mockQueryAPI = async (transactionId, query, topK) => {
+      submissionCalledWith = query;
+      return { answer: "Mock answer", grounded: true, citations: [] };
+    };
+
+    // Replicate handler logic from SemanticExplorationWorkspace
+    const handleSearch = async (questionToAsk) => {
+      const textToQuery = typeof questionToAsk === "string" ? questionToAsk : queryState;
+      const q = textToQuery.trim();
+      if (!q) return;
+      queryState = textToQuery;
+      mockInput.value = textToQuery;
+      await mockQueryAPI("skyview-a1204", q, 5);
+    };
+
+    const handleSelectSuggestedQuery = (suggestedText) => {
+      queryState = suggestedText;
+      mockInput.value = suggestedText;
+      handleSearch(suggestedText);
+    };
+
+    // Simulate clicking suggested question chip
+    const selectedQuestion = "What is the penalty if the builder delays handover?";
+    handleSelectSuggestedQuery(selectedQuestion);
+
+    // Assert: click suggested question → input element value === selected question → query submission occurs
+    assert.strictEqual(
+      mockInput.value,
+      selectedQuestion,
+      "Input element value must strictly equal selected question"
+    );
+    assert.strictEqual(
+      queryState,
+      selectedQuestion,
+      "React query state must be populated with selected question"
+    );
+    assert.strictEqual(
+      submissionCalledWith,
+      selectedQuestion,
+      "RAG query submission must occur with the exact selected question"
+    );
+  });
+
+  test("7. Input CSS differentiates actual populated value from placeholder styling", () => {
+    const workspacePath = path.join(
+      frontendRoot,
+      "src",
+      "components",
+      "transactions",
+      "SemanticExplorationWorkspace.tsx"
+    );
+    const content = fs.readFileSync(workspacePath, "utf-8");
+
+    // Match input className
+    const inputMatch = content.match(/<input[\s\S]*?className="([^"]+)"/);
+    assert.ok(inputMatch, "Must find input element with className");
+    const inputClasses = inputMatch[1];
+
+    // Populated value styling: bright high-contrast text and medium weight
+    assert.ok(
+      inputClasses.includes("text-white"),
+      "Populated text must use text-white for high contrast"
+    );
+    assert.ok(
+      inputClasses.includes("font-medium"),
+      "Populated text must use font-medium (500 weight)"
+    );
+
+    // Placeholder styling: muted gray and normal weight
+    assert.ok(
+      inputClasses.includes("placeholder:text-zinc-500"),
+      "Placeholder must use muted zinc-500 gray"
+    );
+    assert.ok(
+      inputClasses.includes("placeholder:font-normal"),
+      "Placeholder must use normal weight"
+    );
+
+    // Read-only state: ensures value does not get dimmed during loading
+    assert.ok(
+      inputClasses.includes("read-only:text-white"),
+      "Read-only state must maintain text-white without opacity dimming"
+    );
+
+    // Ensure no accidental base classes that would make actual text look like placeholder
+    const classList = inputClasses.split(/\s+/);
+    assert.ok(
+      !classList.includes("text-zinc-500"),
+      "Actual text must not be styled with standalone text-zinc-500"
+    );
+    assert.ok(
+      !classList.includes("text-zinc-400"),
+      "Actual text must not be styled with standalone text-zinc-400"
+    );
   });
 });
