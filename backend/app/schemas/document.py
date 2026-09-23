@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
@@ -23,3 +23,25 @@ class DocumentResponseSchema(BaseModel):
     ocrStatus: str
     clauseCount: int
     issueCount: int
+
+
+class DocumentPageResponseSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    documentId: str
+    pageNumber: int
+    rawText: str
+    layoutBoxes: List[Dict[str, Any]]
+
+
+class DocumentIngestionResponseSchema(BaseModel):
+    documentId: str
+    bundleId: str
+    fileName: str
+    fileSize: str
+    pageCount: int
+    scannedPagesCount: int
+    ocrStatus: str
+    ocrEngineUsed: Optional[str] = None
+    message: str

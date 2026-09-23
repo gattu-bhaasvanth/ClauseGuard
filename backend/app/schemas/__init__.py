@@ -4,7 +4,12 @@ from app.schemas.transaction import (
     TransactionDetailSchema,
     PropertySummarySchema,
 )
-from app.schemas.document import DocumentCreateSchema, DocumentResponseSchema
+from app.schemas.document import (
+    DocumentCreateSchema,
+    DocumentResponseSchema,
+    DocumentPageResponseSchema,
+    DocumentIngestionResponseSchema,
+)
 from app.schemas.clause import ClauseResponseSchema
 from app.schemas.finding import (
     EvidenceCitationSchema,
@@ -20,6 +25,8 @@ __all__ = [
     "PropertySummarySchema",
     "DocumentCreateSchema",
     "DocumentResponseSchema",
+    "DocumentPageResponseSchema",
+    "DocumentIngestionResponseSchema",
     "ClauseResponseSchema",
     "EvidenceCitationSchema",
     "FindingResponseSchema",
