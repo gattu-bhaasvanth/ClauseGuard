@@ -103,6 +103,7 @@ def map_bundle_to_detail(bundle: TransactionBundle) -> TransactionDetailSchema:
             category=c.category,
             status=c.status,
             severity=c.severity,
+            obligationType=getattr(c, "obligation_type", "MUTUAL") or "MUTUAL",
             pageNumber=c.page_number,
             previewText=c.preview_text,
             fullExcerpt=c.full_excerpt,

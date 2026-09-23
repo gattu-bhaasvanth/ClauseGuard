@@ -11,6 +11,7 @@ class ClauseResponseSchema(BaseModel):
     category: str
     status: str
     severity: Optional[str] = None
+    obligationType: Optional[str] = "MUTUAL"
     pageNumber: int
     previewText: str
     fullExcerpt: str

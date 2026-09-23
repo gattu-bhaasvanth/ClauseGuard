@@ -4,14 +4,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
 from app.models.document import Document, DocumentPage
+from app.models.clause import Clause
 from app.schemas.document import (
     DocumentResponseSchema,
     DocumentCreateSchema,
     DocumentPageResponseSchema,
     DocumentIngestionResponseSchema,
 )
+from app.schemas.clause import ClauseResponseSchema
 from app.services import transaction_service
 from app.ingestion.pipeline import ingestion_pipeline
+from app.intelligence.clause_engine import clause_intelligence_engine
 
 router = APIRouter(prefix="/transactions/{transaction_id}/documents", tags=["Documents"])
 
@@ -55,11 +58,12 @@ async def upload_and_ingest_document(
     transaction_id: str,
     file: UploadFile = File(...),
     document_type: str = Form("OTHER"),
+    auto_extract_clauses: bool = Form(True),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Upload a transaction PDF file, automatically extract text, line layout coordinates,
-    detect scanned pages, and apply OCR fallback where required.
+    Upload a transaction PDF file, automatically extract text, layout coordinates,
+    detect scanned pages, apply OCR fallback where required, and optionally segment clauses.
     """
     bundle = await transaction_service.get_transaction_by_id(db, transaction_id)
     if not bundle:
@@ -91,6 +95,12 @@ async def upload_and_ingest_document(
         document_type=document_type,
     )
 
+    # Auto extract clauses if requested
+    if auto_extract_clauses:
+        await clause_intelligence_engine.process_document_clauses(
+            session=db, bundle_id=transaction_id, document_id=result.document_id
+        )
+
     return DocumentIngestionResponseSchema(
         documentId=result.document_id,
         bundleId=result.bundle_id,
@@ -100,7 +110,7 @@ async def upload_and_ingest_document(
         scannedPagesCount=result.scanned_pages_count,
         ocrStatus=result.ocr_status,
         ocrEngineUsed=result.ocr_engine_used,
-        message=f"Document ingested successfully ({result.page_count} pages processed, {result.scanned_pages_count} scanned).",
+        message=f"Document ingested successfully ({result.page_count} pages processed).",
     )
 
 
@@ -121,7 +131,6 @@ async def get_document_pages(
     )
     pages = result.scalars().all()
     if not pages:
-        # Check if document exists
         doc_result = await db.execute(select(Document).filter_by(id=document_id))
         doc = doc_result.scalar_one_or_none()
         if not doc:
@@ -139,4 +148,82 @@ async def get_document_pages(
             layoutBoxes=p.layout_boxes or [],
         )
         for p in pages
+    ]
+
+
+@router.post(
+    "/{document_id}/extract-clauses",
+    response_model=List[ClauseResponseSchema],
+)
+async def extract_document_clauses(
+    transaction_id: str,
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Triggers clause boundary detection and legal taxonomy classification on an ingested document.
+    """
+    doc_result = await db.execute(select(Document).filter_by(id=document_id))
+    doc = doc_result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document with ID '{document_id}' not found.",
+        )
+
+    clauses = await clause_intelligence_engine.process_document_clauses(
+        session=db, bundle_id=transaction_id, document_id=document_id
+    )
+
+    return [
+        ClauseResponseSchema(
+            id=c.id,
+            clauseNumber=c.clause_number,
+            title=c.title,
+            category=c.category,
+            status=c.status,
+            severity=c.severity,
+            obligationType=c.obligation_type,
+            pageNumber=c.page_number,
+            previewText=c.preview_text,
+            fullExcerpt=c.full_excerpt,
+            analysisSummary=c.analysis_summary,
+            riskDetails=c.risk_details,
+        )
+        for c in clauses
+    ]
+
+
+@router.get(
+    "/{document_id}/clauses",
+    response_model=List[ClauseResponseSchema],
+)
+async def get_document_clauses(
+    transaction_id: str,
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Retrieve extracted clauses for a specific document."""
+    result = await db.execute(
+        select(Clause)
+        .filter_by(document_id=document_id)
+        .order_by(Clause.page_number.asc())
+    )
+    clauses = result.scalars().all()
+    return [
+        ClauseResponseSchema(
+            id=c.id,
+            clauseNumber=c.clause_number,
+            title=c.title,
+            category=c.category,
+            status=c.status,
+            severity=c.severity,
+            obligationType=c.obligation_type,
+            pageNumber=c.page_number,
+            previewText=c.preview_text,
+            fullExcerpt=c.full_excerpt,
+            analysisSummary=c.analysis_summary,
+            riskDetails=c.risk_details,
+        )
+        for c in clauses
     ]

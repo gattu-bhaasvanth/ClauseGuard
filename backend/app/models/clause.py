@@ -15,6 +15,7 @@ class Clause(Base):
     category = Column(String(100), default="General Terms")
     status = Column(String(50), default="VERIFIED")  # "RISK", "INCONSISTENCY", "REVIEW_REQUIRED", "VERIFIED"
     severity = Column(String(50), nullable=True)  # "LOW", "MEDIUM", "HIGH", "CRITICAL"
+    obligation_type = Column(String(50), default="MUTUAL")  # "BUYER", "DEVELOPER", "MUTUAL"
     page_number = Column(Integer, default=1)
     preview_text = Column(Text, default="")
     full_excerpt = Column(Text, default="")
