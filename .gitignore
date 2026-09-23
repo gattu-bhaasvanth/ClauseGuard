@@ -84,6 +84,7 @@ coverage/
 out/
 build/
 .turbo/
+*.tsbuildinfo
 
 # Package Manager Logs
 npm-debug.log*
