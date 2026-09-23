@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   FileText,
@@ -38,6 +38,17 @@ export default function TransactionOverviewPage({
   const [activeTab, setActiveTab] = useState<
     "inconsistencies" | "risks" | "timeline" | "documents" | "rag"
   >("inconsistencies");
+  const [isAskModalOpen, setIsAskModalOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isAskModalOpen) {
+        setIsAskModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isAskModalOpen]);
 
   return (
     <div className="space-y-6">
@@ -63,9 +74,13 @@ export default function TransactionOverviewPage({
 
         <div className="flex items-center gap-2.5 flex-wrap">
           <Button
-            variant={activeTab === "rag" ? "emerald" : "secondary"}
+            data-testid="header-ask-clauseguard-btn"
+            variant="emerald"
             size="sm"
-            onClick={() => setActiveTab("rag")}
+            onClick={() => {
+              setActiveTab("rag");
+              setIsAskModalOpen(true);
+            }}
             className="gap-1.5 text-xs shadow-subtle-glow"
           >
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
@@ -183,7 +198,20 @@ export default function TransactionOverviewPage({
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                data-testid={tab.id === "rag" ? "tab-ask-clauseguard-btn" : undefined}
+                onClick={() => {
+                  setActiveTab(tab.id as any);
+                  if (tab.id === "rag") {
+                    setTimeout(() => {
+                      const el = document.getElementById("ask-clauseguard-workspace");
+                      if (el) {
+                        el.scrollIntoView({ behavior: "smooth", block: "start" });
+                        const input = el.querySelector("input");
+                        if (input) input.focus();
+                      }
+                    }, 50);
+                  }
+                }}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
                   isActive
                     ? "bg-zinc-800 text-white font-semibold border border-zinc-700/80 shadow-sm"
@@ -272,9 +300,32 @@ export default function TransactionOverviewPage({
 
         {/* Tab 5: Semantic Exploration / RAG Workspace */}
         {activeTab === "rag" && (
-          <SemanticExplorationWorkspace transactionId={transaction.id} />
+          <div id="ask-clauseguard-workspace" data-testid="rag-tab-panel">
+            <SemanticExplorationWorkspace transactionId={transaction.id} />
+          </div>
         )}
       </div>
+
+      {/* Interactive Ask ClauseGuard Modal Overlay */}
+      {isAskModalOpen && (
+        <div
+          data-testid="ask-clauseguard-modal-overlay"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setIsAskModalOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl border border-emerald-500/30 bg-surface-card p-4 sm:p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <SemanticExplorationWorkspace
+              transactionId={transaction.id}
+              isModal={true}
+              autoFocusInput={true}
+              onClose={() => setIsAskModalOpen(false)}
+            />
+          </div>
+        </div>
+      )}
 
       <LegalDisclaimerNotice variant="banner" />
     </div>

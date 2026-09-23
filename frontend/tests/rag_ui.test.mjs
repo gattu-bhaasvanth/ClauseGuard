@@ -25,7 +25,7 @@ describe("Phase 8 Frontend RAG UI Integration Tests", () => {
     assert.ok(content.includes("status: \"GROUNDED\" | \"INSUFFICIENT_EVIDENCE\""), "RAGQueryResponse must have status union");
   });
 
-  test("2. SemanticExplorationWorkspace and SourceEvidenceModal components exist", () => {
+  test("2. SemanticExplorationWorkspace and SourceEvidenceModal components exist with modal support", () => {
     const workspacePath = path.join(
       frontendRoot,
       "src",
@@ -39,6 +39,26 @@ describe("Phase 8 Frontend RAG UI Integration Tests", () => {
     assert.ok(
       workspaceContent.includes("export function SemanticExplorationWorkspace"),
       "Must export SemanticExplorationWorkspace"
+    );
+    assert.ok(
+      workspaceContent.includes("isModal"),
+      "Must support isModal prop for popup overlay"
+    );
+    assert.ok(
+      workspaceContent.includes("autoFocusInput"),
+      "Must support autoFocusInput prop for search field"
+    );
+    assert.ok(
+      workspaceContent.includes("data-testid=\"rag-query-input\""),
+      "Must include data-testid for query input"
+    );
+    assert.ok(
+      workspaceContent.includes("data-testid=\"rag-submit-btn\""),
+      "Must include data-testid for submit button"
+    );
+    assert.ok(
+      workspaceContent.includes("id=\"ask-clauseguard-workspace\""),
+      "Must define workspace DOM id for scroll targeting"
     );
     assert.ok(
       workspaceContent.includes("Ask ClauseGuard"),
@@ -73,7 +93,7 @@ describe("Phase 8 Frontend RAG UI Integration Tests", () => {
     );
   });
 
-  test("3. Transaction detail page exposes RAG tab and Ask ClauseGuard action", () => {
+  test("3. Header Ask ClauseGuard button triggers active click handler and opens modal overlay", () => {
     const pagePath = path.join(
       frontendRoot,
       "src",
@@ -87,20 +107,28 @@ describe("Phase 8 Frontend RAG UI Integration Tests", () => {
     const pageContent = fs.readFileSync(pagePath, "utf-8");
 
     assert.ok(
-      pageContent.includes("SemanticExplorationWorkspace"),
-      "page.tsx must import SemanticExplorationWorkspace"
+      pageContent.includes("data-testid=\"header-ask-clauseguard-btn\""),
+      "page.tsx must define data-testid for header Ask ClauseGuard button"
     );
     assert.ok(
-      pageContent.includes("\"rag\""),
-      "page.tsx activeTab must include 'rag'"
+      pageContent.includes("setIsAskModalOpen(true)"),
+      "Clicking header button must activate isAskModalOpen state"
     );
     assert.ok(
-      pageContent.includes("Ask ClauseGuard (RAG)"),
-      "page.tsx must render Ask ClauseGuard tab header"
+      pageContent.includes("data-testid=\"ask-clauseguard-modal-overlay\""),
+      "page.tsx must render modal overlay when isAskModalOpen is true"
     );
     assert.ok(
-      pageContent.includes("<SemanticExplorationWorkspace transactionId={transaction.id} />"),
-      "page.tsx must render SemanticExplorationWorkspace when rag tab is active"
+      pageContent.includes("tab-ask-clauseguard-btn"),
+      "page.tsx must define data-testid for tab Ask ClauseGuard button"
+    );
+    assert.ok(
+      pageContent.includes("scrollIntoView"),
+      "Tab button must invoke smooth scroll into workspace view"
+    );
+    assert.ok(
+      pageContent.includes("data-testid=\"rag-tab-panel\""),
+      "page.tsx must render rag tab panel with data-testid"
     );
   });
 

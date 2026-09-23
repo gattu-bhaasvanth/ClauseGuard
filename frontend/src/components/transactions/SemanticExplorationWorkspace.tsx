@@ -17,6 +17,7 @@ import {
   HelpCircle,
   RefreshCw,
   CheckCircle2,
+  X,
 } from "lucide-react";
 import { RAGQueryResponse, RAGCitation } from "@/types/rag";
 import { queryTransactionRAG } from "@/lib/api";
@@ -27,6 +28,9 @@ import { Card } from "@/components/ui/Card";
 
 interface SemanticExplorationWorkspaceProps {
   transactionId: string;
+  isModal?: boolean;
+  onClose?: () => void;
+  autoFocusInput?: boolean;
 }
 
 const SUGGESTED_QUERIES = [
@@ -39,6 +43,9 @@ const SUGGESTED_QUERIES = [
 
 export function SemanticExplorationWorkspace({
   transactionId,
+  isModal = false,
+  onClose,
+  autoFocusInput = false,
 }: SemanticExplorationWorkspaceProps) {
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -75,10 +82,14 @@ export function SemanticExplorationWorkspace({
   };
 
   return (
-    <div className="space-y-6">
+    <div
+      id="ask-clauseguard-workspace"
+      data-testid={isModal ? "rag-workspace-modal" : "rag-workspace"}
+      className="space-y-6"
+    >
       {/* Top Banner / Guidance */}
       <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/30 via-surface-card to-purple-950/20 border border-emerald-500/20 shadow-subtle flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
+        <div className="space-y-1 flex-1">
           <div className="flex items-center gap-2">
             <span className="p-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               <Sparkles className="w-4 h-4" />
@@ -101,6 +112,16 @@ export function SemanticExplorationWorkspace({
             <Cpu className="w-3.5 h-3.5 text-emerald-400" />
             <span>100% Local Inference (384-d ONNX)</span>
           </div>
+          {isModal && onClose && (
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors border border-surface-border"
+              aria-label="Close modal"
+              data-testid="rag-modal-close-btn"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -122,6 +143,8 @@ export function SemanticExplorationWorkspace({
               placeholder="Ask a question about handover dates, penalty rates, carpet area, payment terms..."
               className="w-full bg-surface-base border border-surface-border rounded-lg pl-10 pr-4 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 transition-all font-sans"
               disabled={isLoading}
+              autoFocus={autoFocusInput}
+              data-testid="rag-query-input"
             />
           </div>
           <Button
@@ -130,6 +153,7 @@ export function SemanticExplorationWorkspace({
             size="md"
             disabled={!query.trim() || isLoading}
             className="gap-2 text-xs sm:text-sm shrink-0 px-4"
+            data-testid="rag-submit-btn"
           >
             {isLoading ? (
               <>
