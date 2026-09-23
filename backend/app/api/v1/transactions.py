@@ -10,8 +10,17 @@ from app.schemas.transaction import (
 from app.schemas.clause import ClauseResponseSchema
 from app.schemas.finding import InconsistencyResponseSchema, RiskResponseSchema
 from app.schemas.attribute import UnifiedTransactionMetadataSchema
+from app.schemas.matrix import (
+    ComparisonMatrixResponseSchema,
+    TransactionAnalysisResponseSchema,
+)
+from app.models.document import Document
+from app.models.attribute import ExtractedAttribute
 from app.services import transaction_service
 from app.intelligence.metadata_engine import metadata_engine
+from app.intelligence.cross_doc_engine import cross_document_engine
+from app.intelligence.alignment_matrix import alignment_matrix_builder
+from sqlalchemy import select
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -87,5 +96,67 @@ async def get_transaction_unified_metadata(
         )
     return await metadata_engine.get_unified_transaction_metadata(
         session=db, bundle_id=transaction_id
+    )
+
+
+@router.post("/{transaction_id}/analyze", response_model=TransactionAnalysisResponseSchema)
+async def analyze_transaction_consistency(
+    transaction_id: str, db: AsyncSession = Depends(get_db)
+):
+    """
+    Triggers automated cross-document consistency verification across an entire transaction bundle.
+    Detects contradictions in carpet area, possession dates, pricing, and unit IDs,
+    constructs dual-cited audit evidence, and recalculates the dynamic transaction health score.
+    """
+    bundle = await transaction_service.get_transaction_by_id(db, transaction_id)
+    if not bundle:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transaction with ID '{transaction_id}' not found.",
+        )
+    return await cross_document_engine.analyze_transaction(
+        session=db, bundle_id=transaction_id
+    )
+
+
+@router.get("/{transaction_id}/inconsistencies", response_model=List[InconsistencyResponseSchema])
+async def get_transaction_inconsistencies(
+    transaction_id: str, db: AsyncSession = Depends(get_db)
+):
+    """Retrieve all cross-document inconsistency findings for a transaction bundle."""
+    bundle = await transaction_service.get_transaction_by_id(db, transaction_id)
+    if not bundle:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transaction with ID '{transaction_id}' not found.",
+        )
+    return bundle.inconsistencies
+
+
+@router.get("/{transaction_id}/matrix", response_model=ComparisonMatrixResponseSchema)
+async def get_transaction_comparison_matrix(
+    transaction_id: str, db: AsyncSession = Depends(get_db)
+):
+    """
+    Retrieve side-by-side comparative attribute matrix across all documents in a bundle
+    with variance flags and exact source citations.
+    """
+    bundle = await transaction_service.get_transaction_by_id(db, transaction_id)
+    if not bundle:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transaction with ID '{transaction_id}' not found.",
+        )
+
+    res_docs = await db.execute(select(Document).filter_by(bundle_id=transaction_id))
+    documents = res_docs.scalars().all()
+
+    res_attrs = await db.execute(select(ExtractedAttribute).filter_by(bundle_id=transaction_id))
+    attributes = res_attrs.scalars().all()
+
+    return alignment_matrix_builder.build_matrix(
+        bundle_id=transaction_id,
+        documents=documents,
+        attributes=attributes,
     )
 
