@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Dict, Any
 from app.intelligence.taxonomy import ClauseCategory, TAXONOMY_KEYWORDS
 
 
@@ -12,6 +12,11 @@ class ClassificationResult:
     severity: Optional[str]  # "LOW", "MEDIUM", "HIGH", "CRITICAL"
     analysis_summary: str
     risk_details: Optional[str] = None
+    classification_source: str = "DETERMINISTIC_HEURISTIC"
+    model_version: Optional[str] = "heuristic-v1"
+    dataset_version: Optional[str] = "taxonomy-v1"
+    top_alternatives: Optional[List[Dict[str, Any]]] = None
+    explanation_notes: Optional[str] = None
 
 
 class ClauseClassifier:

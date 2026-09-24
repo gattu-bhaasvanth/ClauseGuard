@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Settings, Shield, Sliders, Database, Cpu } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { ModelDiagnosticsHub } from "@/components/intelligence/ModelDiagnosticsHub";
 
 export default function SettingsPage() {
   const [provider, setProvider] = useState("gemini");
@@ -97,6 +98,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </Card>
+
+      {/* Model Intelligence & Diagnostics Hub (Phase 9) */}
+      <ModelDiagnosticsHub />
     </div>
   );
 }

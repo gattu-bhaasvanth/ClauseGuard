@@ -4,6 +4,7 @@ import React from "react";
 import { Filter, ArrowRight, ShieldAlert, Sparkles } from "lucide-react";
 import { ClauseItem } from "@/types/transaction";
 import { SeverityBadge } from "@/components/shared/SeverityBadge";
+import { ModelConfidenceBadge } from "@/components/intelligence/ModelConfidenceBadge";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +12,7 @@ interface ClauseListProps {
   clauses: ClauseItem[];
   selectedClauseId: string;
   onSelectClause: (clause: ClauseItem) => void;
+  onInspectClause?: (clause: ClauseItem) => void;
   className?: string;
 }
 
@@ -18,6 +20,7 @@ export function ClauseList({
   clauses,
   selectedClauseId,
   onSelectClause,
+  onInspectClause,
   className,
 }: ClauseListProps) {
   return (
@@ -79,9 +82,20 @@ export function ClauseList({
                 </p>
               </div>
 
-              <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1 border-t border-surface-border/40">
-                <span>{clause.category}</span>
-                <span className="font-mono">Page {clause.pageNumber}</span>
+              <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1 border-t border-surface-border/40 gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="truncate">{clause.category}</span>
+                  {clause.confidence !== undefined && (
+                    <ModelConfidenceBadge
+                      confidence={clause.confidence}
+                      source={clause.classificationSource}
+                      onClick={() => {
+                        if (onInspectClause) onInspectClause(clause);
+                      }}
+                    />
+                  )}
+                </div>
+                <span className="font-mono flex-shrink-0">Page {clause.pageNumber}</span>
               </div>
             </div>
           );

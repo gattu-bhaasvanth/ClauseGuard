@@ -109,6 +109,12 @@ def map_bundle_to_detail(bundle: TransactionBundle) -> TransactionDetailSchema:
             fullExcerpt=c.full_excerpt,
             analysisSummary=c.analysis_summary,
             riskDetails=c.risk_details,
+            confidence=getattr(c, "confidence", 1.0) or 1.0,
+            classificationSource=getattr(c, "classification_source", "DETERMINISTIC_HEURISTIC") or "DETERMINISTIC_HEURISTIC",
+            modelVersion=getattr(c, "model_version", None),
+            datasetVersion=getattr(c, "dataset_version", None),
+            topAlternatives=getattr(c, "top_alternatives", None),
+            explanationNotes=getattr(c, "explanation_notes", None),
         )
         for c in bundle.clauses
     ]

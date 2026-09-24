@@ -1,5 +1,5 @@
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 
@@ -7,6 +7,7 @@ from app.models.document import Document, DocumentPage
 from app.models.clause import Clause
 from app.intelligence.segmenter import ClauseBoundaryDetector, RawClauseChunk
 from app.intelligence.classifier import ClauseClassifier, ClassificationResult
+from app.intelligence.ml.hybrid_classifier import hybrid_clause_classifier
 from app.intelligence.obligation_extractor import ObligationExtractor
 
 
@@ -19,11 +20,11 @@ class ClauseIntelligenceEngine:
     def __init__(
         self,
         segmenter: Optional[ClauseBoundaryDetector] = None,
-        classifier: Optional[ClauseClassifier] = None,
+        classifier: Optional[Any] = None,
         obligation_extractor: Optional[ObligationExtractor] = None,
     ):
         self.segmenter = segmenter or ClauseBoundaryDetector()
-        self.classifier = classifier or ClauseClassifier()
+        self.classifier = classifier or hybrid_clause_classifier
         self.obligation_extractor = obligation_extractor or ObligationExtractor()
 
     async def process_document_clauses(
@@ -78,6 +79,12 @@ class ClauseIntelligenceEngine:
                 full_excerpt=chunk.full_excerpt,
                 analysis_summary=cls_res.analysis_summary,
                 risk_details=cls_res.risk_details,
+                confidence=cls_res.confidence,
+                classification_source=cls_res.classification_source,
+                model_version=cls_res.model_version,
+                dataset_version=cls_res.dataset_version,
+                top_alternatives=cls_res.top_alternatives,
+                explanation_notes=cls_res.explanation_notes,
             )
             session.add(clause_entity)
             persisted_clauses.append(clause_entity)

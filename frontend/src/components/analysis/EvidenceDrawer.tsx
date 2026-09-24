@@ -3,6 +3,7 @@ import { FileText, ShieldAlert, Sparkles, AlertCircle, CheckCircle2 } from "luci
 import { ClauseItem } from "@/types/transaction";
 import { Card } from "@/components/ui/Card";
 import { SeverityBadge } from "@/components/shared/SeverityBadge";
+import { ModelConfidenceBadge } from "@/components/intelligence/ModelConfidenceBadge";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
@@ -10,12 +11,14 @@ interface EvidenceDrawerProps {
   clause: ClauseItem;
   documentName?: string;
   className?: string;
+  onInspectAI?: () => void;
 }
 
 export function EvidenceDrawer({
   clause,
   documentName = "Builder-Buyer Agreement",
   className,
+  onInspectAI,
 }: EvidenceDrawerProps) {
   return (
     <Card className={cn("p-5 border-surface-border bg-surface flex flex-col justify-between space-y-4", className)}>
@@ -38,9 +41,17 @@ export function EvidenceDrawer({
               Evidence Inspector
             </span>
           </div>
-          <span className="text-[10px] text-zinc-500 font-mono">
-            Lineage Anchor
-          </span>
+          {clause.confidence !== undefined ? (
+            <ModelConfidenceBadge
+              confidence={clause.confidence}
+              source={clause.classificationSource}
+              onClick={onInspectAI}
+            />
+          ) : (
+            <span className="text-[10px] text-zinc-500 font-mono">
+              Lineage Anchor
+            </span>
+          )}
         </div>
 
         {/* Structured Evidence Citation Details */}
@@ -97,6 +108,19 @@ export function EvidenceDrawer({
             </p>
           )}
         </div>
+
+        {onInspectAI && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={onInspectAI}
+            className="w-full mt-3 text-xs gap-1.5 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Inspect AI Classification & Alternatives</span>
+          </Button>
+        )}
       </div>
 
       {/* Demo Notice Banner */}

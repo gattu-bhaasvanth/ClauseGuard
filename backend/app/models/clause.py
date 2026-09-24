@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Integer, Text, ForeignKey
+from sqlalchemy import Column, String, Integer, Float, Text, JSON, ForeignKey
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -21,6 +21,14 @@ class Clause(Base):
     full_excerpt = Column(Text, default="")
     analysis_summary = Column(Text, default="")
     risk_details = Column(Text, nullable=True)
+
+    # Phase 9: Intelligence Enhancement & Provenance Metadata
+    confidence = Column(Float, default=1.0)
+    classification_source = Column(String(50), default="DETERMINISTIC_HEURISTIC")  # "ML_TRANSFORMER" or "DETERMINISTIC_HEURISTIC"
+    model_version = Column(String(100), nullable=True)
+    dataset_version = Column(String(100), nullable=True)
+    top_alternatives = Column(JSON, nullable=True)  # List of {"category": str, "probability": float}
+    explanation_notes = Column(Text, nullable=True)
 
     # Relationships
     bundle = relationship("TransactionBundle", back_populates="clauses")

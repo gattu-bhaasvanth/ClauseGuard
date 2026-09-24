@@ -17,6 +17,7 @@ import { ClauseItem } from "@/types/transaction";
 import { DocumentViewerMock } from "@/components/analysis/DocumentViewerMock";
 import { ClauseList } from "@/components/analysis/ClauseList";
 import { EvidenceDrawer } from "@/components/analysis/EvidenceDrawer";
+import { ClassificationInspectorDrawer } from "@/components/intelligence/ClassificationInspectorDrawer";
 import { Button } from "@/components/ui/Button";
 import { SeverityBadge } from "@/components/shared/SeverityBadge";
 import { LegalDisclaimerNotice } from "@/components/shared/LegalDisclaimerNotice";
@@ -29,6 +30,13 @@ export default function DocumentAnalysisPage({
   const transaction = MOCK_SKYVIEW_TRANSACTION;
   const clauses = transaction.clauses;
   const [selectedClause, setSelectedClause] = useState<ClauseItem>(clauses[0]);
+  const [inspectingClause, setInspectingClause] = useState<ClauseItem | null>(null);
+  const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+
+  const handleOpenInspector = (clause: ClauseItem) => {
+    setInspectingClause(clause);
+    setIsInspectorOpen(true);
+  };
 
   return (
     <div className="space-y-4">
@@ -82,6 +90,7 @@ export default function DocumentAnalysisPage({
               clauses={clauses}
               selectedClauseId={selectedClause.id}
               onSelectClause={(c) => setSelectedClause(c)}
+              onInspectClause={handleOpenInspector}
             />
           </div>
 
@@ -91,10 +100,18 @@ export default function DocumentAnalysisPage({
               clause={selectedClause}
               documentName="Builder-Buyer Agreement"
               className="h-full"
+              onInspectAI={() => handleOpenInspector(selectedClause)}
             />
           </div>
         </div>
       </div>
+
+      {/* AI Classification Inspector Slide-Over Panel */}
+      <ClassificationInspectorDrawer
+        clause={inspectingClause as any}
+        isOpen={isInspectorOpen}
+        onClose={() => setIsInspectorOpen(false)}
+      />
 
       {/* Bottom informational disclaimer */}
       <LegalDisclaimerNotice variant="compact" />

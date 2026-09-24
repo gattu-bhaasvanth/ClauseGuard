@@ -67,6 +67,12 @@ export interface ClauseItem {
   fullExcerpt: string;
   analysisSummary: string;
   riskDetails?: string;
+  confidence?: number;
+  classificationSource?: "ML_TRANSFORMER" | "DETERMINISTIC_RULES" | "LLM_FALLBACK" | string;
+  modelVersion?: string;
+  datasetVersion?: string;
+  topAlternatives?: Array<{ category: string; probability: number }>;
+  explanationNotes?: string;
 }
 
 export interface TransactionDocument {

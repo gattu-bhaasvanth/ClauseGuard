@@ -1,0 +1,87 @@
+{
+  "manifest_version": "1.0",
+  "project": "ClauseGuard Phase 9 Intelligence",
+  "licensing_policy": "Public Statutory Domain under Section 52(1)(q) of the Indian Copyright Act, 1957 (Official Gazettes, Government Notifications, Statutory Model Forms, and Legislative Rules — Unrestricted Public Legal Domain for Commercial & Non-Commercial Analysis)",
+  "provenance_sources": [
+    {
+      "source_id": "SRC-IN-CENTRAL-FORM-A",
+      "title": "Central Real Estate (Regulation and Development) General Rules, 2016 — Form 'A' (Model Agreement for Sale)",
+      "issuing_authority": "Ministry of Housing and Urban Affairs (MoHUA), Government of India",
+      "statutory_act": "The Real Estate (Regulation and Development) Act, 2016 (Act No. 16 of 2016)",
+      "source_url": "https://mohua.gov.in/upload/uploadfiles/files/Real_Estate_Rules_2016.pdf",
+      "jurisdiction": "IN-FED",
+      "license": "Government Open Data / Public Domain",
+      "source_type": "Statutory Model Agreement",
+      "publication_date": "2016-10-31"
+    },
+    {
+      "source_id": "SRC-IN-MAHARERA-MODEL",
+      "title": "Maharashtra Real Estate Regulatory Authority (General) Regulations, 2017 — Model Form of Agreement for Sale",
+      "issuing_authority": "MahaRERA, Government of Maharashtra",
+      "statutory_act": "Maharashtra Real Estate (Regulation and Development) (Registration of Real Estate Projects, Registration of Real Estate Agents, Rates of Interest and Disclosures on Website) Rules, 2017",
+      "source_url": "https://maharera.mahaonline.gov.in/Upload/PDF/Model%20Agreement.pdf",
+      "jurisdiction": "IN-MH",
+      "license": "Government Open Data / Public Domain",
+      "source_type": "Statutory Model Agreement",
+      "publication_date": "2017-05-01"
+    },
+    {
+      "source_id": "SRC-IN-KARNATAKA-FORM-N",
+      "title": "Karnataka Real Estate (Regulation and Development) Rules, 2017 — Form 'N' (Agreement for Sale)",
+      "issuing_authority": "Housing Department, Government of Karnataka / K-RERA",
+      "statutory_act": "Karnataka Real Estate (Regulation and Development) Rules, 2017",
+      "source_url": "https://rera.karnataka.gov.in/resources/static/pdf/Karnataka_RERA_Rules_2017.pdf",
+      "jurisdiction": "IN-KA",
+      "license": "Government Open Data / Public Domain",
+      "source_type": "Statutory Model Agreement",
+      "publication_date": "2017-07-10"
+    },
+    {
+      "source_id": "SRC-IN-HARYANA-BBA",
+      "title": "Haryana Real Estate Regulatory Authority (Panchkula / Gurugram) Standard Model Agreement for Sale",
+      "issuing_authority": "Haryana Real Estate Regulatory Authority (HRERA)",
+      "statutory_act": "Haryana Real Estate (Regulation and Development) Rules, 2017",
+      "source_url": "https://haryanarera.gov.in/standard_bba_format.pdf",
+      "jurisdiction": "IN-HR",
+      "license": "Government Open Data / Public Domain",
+      "source_type": "State Gazette Notification",
+      "publication_date": "2018-12-05"
+    },
+    {
+      "source_id": "SRC-IN-TAMILNADU-FORM-G",
+      "title": "Tamil Nadu Real Estate (Regulation and Development) Rules, 2017 — Form 'G' Agreement for Sale",
+      "issuing_authority": "Housing and Urban Development Department, Government of Tamil Nadu / TNRERA",
+      "statutory_act": "Tamil Nadu Real Estate (Regulation and Development) Rules, 2017",
+      "source_url": "https://www.rera.tn.gov.in/tnrera/rules/TNRERA_Rules_2017.pdf",
+      "jurisdiction": "IN-TN",
+      "license": "Government Open Data / Public Domain",
+      "source_type": "Statutory Model Agreement",
+      "publication_date": "2017-06-22"
+    },
+    {
+      "source_id": "SRC-IN-DELHI-DDA",
+      "title": "Delhi Real Estate Regulatory Authority Model Regulations & Conveyance Guidelines",
+      "issuing_authority": "Delhi Real Estate Regulatory Authority / DDA",
+      "statutory_act": "National Capital Territory of Delhi Real Estate (Regulation and Development) (General) Rules, 2016",
+      "source_url": "https://dda.gov.in/sites/default/files/conveyance_model.pdf",
+      "jurisdiction": "IN-DL",
+      "license": "Government Open Data / Public Domain",
+      "source_type": "Public Sector Conveyance",
+      "publication_date": "2016-11-28"
+    }
+  ],
+  "categories_covered": [
+    "Possession & Handover",
+    "Payment Milestones & Delay Interest",
+    "Carpet Area & Measurement Adjustments",
+    "Cancellation & Earnest Money Forfeiture",
+    "Alteration of Layout & Specifications",
+    "Defects Liability & Structural Rectification",
+    "Force Majeure & Uncontrollable Delays",
+    "Dispute Resolution & Jurisdiction",
+    "RERA & Statutory Approvals",
+    "Maintenance & Additional Levies",
+    "General Terms & Covenants"
+  ],
+  "pii_handling": "Fully anonymized with synthetic tokens ([BUYER_NAME], [PROMOTER_LLP], [UNIT_NO], [REG_NO]). Zero private individual information."
+}

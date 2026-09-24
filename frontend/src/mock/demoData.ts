@@ -312,6 +312,15 @@ export const MOCK_SKYVIEW_TRANSACTION: Transaction = {
       analysisSummary:
         "Asymmetrical delay penalty. Developer pays approx 2.4% annualized return, while allottee pays 18% p.a. for late payments.",
       riskDetails: "Violates reciprocal interest principles under RERA Section 18.",
+      confidence: 0.94,
+      classificationSource: "ML_TRANSFORMER",
+      modelVersion: "cg-intel-v1.0.0",
+      datasetVersion: "cg-statutory-corpus-v1.0",
+      topAlternatives: [
+        { category: "Force Majeure & Uncontrollable Delays", probability: 0.04 },
+        { category: "Cancellation & Earnest Money Forfeiture", probability: 0.02 },
+      ],
+      explanationNotes: "High confidence prototype prediction for handover obligations and delay compensation.",
     },
     {
       id: "cls-02",
@@ -327,6 +336,14 @@ export const MOCK_SKYVIEW_TRANSACTION: Transaction = {
       analysisSummary:
         "High interest rate (18% p.a. compounded monthly). Significant financial penalty on short-term cash flow delays.",
       riskDetails: "Review required against statutory state RERA default benchmark.",
+      confidence: 0.96,
+      classificationSource: "ML_TRANSFORMER",
+      modelVersion: "cg-intel-v1.0.0",
+      datasetVersion: "cg-statutory-corpus-v1.0",
+      topAlternatives: [
+        { category: "Cancellation & Earnest Money Forfeiture", probability: 0.03 },
+      ],
+      explanationNotes: "High confidence prototype prediction for interest penal provisions.",
     },
     {
       id: "cls-03",
@@ -342,6 +359,14 @@ export const MOCK_SKYVIEW_TRANSACTION: Transaction = {
       analysisSummary:
         "Inconsistency detected: Brochure advertised 1,450 sq.ft carpet area. The contract defines 1,380 sq.ft with 3% additional variation allowance.",
       riskDetails: "Potential net reduction of up to 111 sq.ft compared to initial sales pitch.",
+      confidence: 0.91,
+      classificationSource: "ML_TRANSFORMER",
+      modelVersion: "cg-intel-v1.0.0",
+      datasetVersion: "cg-statutory-corpus-v1.0",
+      topAlternatives: [
+        { category: "Alteration of Layout & Specifications", probability: 0.06 },
+      ],
+      explanationNotes: "Predicted dimensional tolerance and carpet area variation.",
     },
     {
       id: "cls-04",
@@ -356,6 +381,14 @@ export const MOCK_SKYVIEW_TRANSACTION: Transaction = {
         "14.1. In case of cancellation or termination of this Agreement by the Allottee, the Promoter shall forfeit twenty percent (20%) of the Total Consideration along with brokerage and taxes as liquidated damages.",
       analysisSummary:
         "High forfeiture rate (20% vs typical 10% industry standard). Involves ₹28.5 Lakhs forfeiture risk.",
+      confidence: 0.88,
+      classificationSource: "ML_TRANSFORMER",
+      modelVersion: "cg-intel-v1.0.0",
+      datasetVersion: "cg-statutory-corpus-v1.0",
+      topAlternatives: [
+        { category: "Payment Milestones & Delay Interest", probability: 0.08 },
+      ],
+      explanationNotes: "Termination liquidated damages and forfeiture rate detected.",
     },
     {
       id: "cls-05",
@@ -370,6 +403,14 @@ export const MOCK_SKYVIEW_TRANSACTION: Transaction = {
         "18.4. Any dispute arising out of this Agreement shall be referred to sole arbitration appointed by the Promoter. Courts at New Delhi alone shall have exclusive jurisdiction.",
       analysisSummary:
         "Unilateral arbitrator appointment clause has been contested in constitutional courts. Exclusive jurisdiction may be inconvenient.",
+      confidence: 0.85,
+      classificationSource: "ML_TRANSFORMER",
+      modelVersion: "cg-intel-v1.0.0",
+      datasetVersion: "cg-statutory-corpus-v1.0",
+      topAlternatives: [
+        { category: "General Terms & Covenants", probability: 0.11 },
+      ],
+      explanationNotes: "Arbitration clause and forum selection clause detected.",
     },
     {
       id: "cls-06",
@@ -384,6 +425,14 @@ export const MOCK_SKYVIEW_TRANSACTION: Transaction = {
         "2.1. The Project is duly registered under Haryana Real Estate Regulatory Authority (HARERA) vide Registration No. HRERA-PKL-GGM-1248-2023 dated 14/03/2023, valid up to 31/12/2028.",
       analysisSummary:
         "Valid statutory registration cited. Expiry matches the completion timeline.",
+      confidence: 0.98,
+      classificationSource: "ML_TRANSFORMER",
+      modelVersion: "cg-intel-v1.0.0",
+      datasetVersion: "cg-statutory-corpus-v1.0",
+      topAlternatives: [
+        { category: "General Terms & Covenants", probability: 0.01 },
+      ],
+      explanationNotes: "Statutory RERA authority registration identified.",
     },
   ],
   createdAt: "2026-09-18T10:14:00Z",

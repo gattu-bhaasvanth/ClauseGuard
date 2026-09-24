@@ -17,3 +17,9 @@ class ClauseResponseSchema(BaseModel):
     fullExcerpt: str
     analysisSummary: str
     riskDetails: Optional[str] = None
+    confidence: Optional[float] = 1.0
+    classificationSource: Optional[str] = "DETERMINISTIC_HEURISTIC"
+    modelVersion: Optional[str] = None
+    datasetVersion: Optional[str] = None
+    topAlternatives: Optional[list] = None
+    explanationNotes: Optional[str] = None

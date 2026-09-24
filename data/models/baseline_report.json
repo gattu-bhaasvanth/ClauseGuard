@@ -1,0 +1,308 @@
+{
+  "engine": "Phase 4 Deterministic ClauseClassifier (Keyword/Heuristic Baseline)",
+  "evaluation_dataset": "ClauseGuard Real-Estate Holdout Test Split (test.jsonl)",
+  "sample_count": 59,
+  "overall_accuracy": 0.5932,
+  "macro_precision": 0.5413,
+  "macro_recall": 0.6364,
+  "macro_f1": 0.572,
+  "weighted_f1": 0.5275,
+  "average_latency_ms": 0.017,
+  "p95_latency_ms": 0.02,
+  "per_category_metrics": {
+    "Possession & Handover": {
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6667,
+      "support": 6
+    },
+    "Payment Milestones & Delay Interest": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "support": 6
+    },
+    "Carpet Area & Measurement Adjustments": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 6
+    },
+    "Cancellation & Earnest Money Forfeiture": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 6
+    },
+    "Alteration of Layout & Specifications": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 5
+    },
+    "Defects Liability & Structural Rectification": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 6
+    },
+    "Force Majeure & Uncontrollable Delays": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "support": 6
+    },
+    "Dispute Resolution & Jurisdiction": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "support": 6
+    },
+    "RERA & Statutory Approvals": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "support": 6
+    },
+    "Maintenance & Additional Levies": {
+      "precision": 0.4545,
+      "recall": 1.0,
+      "f1": 0.625,
+      "support": 5
+    },
+    "General Terms & Covenants": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 1
+    }
+  },
+  "confusion_matrix": {
+    "Possession & Handover": {
+      "Possession & Handover": 6,
+      "Payment Milestones & Delay Interest": 0,
+      "Carpet Area & Measurement Adjustments": 0,
+      "Cancellation & Earnest Money Forfeiture": 0,
+      "Alteration of Layout & Specifications": 0,
+      "Defects Liability & Structural Rectification": 0,
+      "Force Majeure & Uncontrollable Delays": 0,
+      "Dispute Resolution & Jurisdiction": 0,
+      "RERA & Statutory Approvals": 0,
+      "Maintenance & Additional Levies": 0,
+      "General Terms & Covenants": 0
+    },
+    "Payment Milestones & Delay Interest": {
+      "Possession & Handover": 0,
+      "Payment Milestones & Delay Interest": 0,
+      "Carpet Area & Measurement Adjustments": 0,
+      "Cancellation & Earnest Money Forfeiture": 0,
+      "Alteration of Layout & Specifications": 0,
+      "Defects Liability & Structural Rectification": 0,
+      "Force Majeure & Uncontrollable Delays": 0,
+      "Dispute Resolution & Jurisdiction": 0,
+      "RERA & Statutory Approvals": 0,
+      "Maintenance & Additional Levies": 6,
+      "General Terms & Covenants": 0
+    },
+    "Carpet Area & Measurement Adjustments": {
+      "Possession & Handover": 0,
+      "Payment Milestones & Delay Interest": 0,
+      "Carpet Area & Measurement Adjustments": 6,
+      "Cancellation & Earnest Money Forfeiture": 0,
+      "Alteration of Layout & Specifications": 0,
+      "Defects Liability & Structural Rectification": 0,
+      "Force Majeure & Uncontrollable Delays": 0,
+      "Dispute Resolution & Jurisdiction": 0,
+      "RERA & Statutory Approvals": 0,
+      "Maintenance & Additional Levies": 0,
+      "General Terms & Covenants": 0
+    },
+    "Cancellation & Earnest Money Forfeiture": {
+      "Possession & Handover": 0,
+      "Payment Milestones & Delay Interest": 0,
+      "Carpet Area & Measurement Adjustments": 0,
+      "Cancellation & Earnest Money Forfeiture": 6,
+      "Alteration of Layout & Specifications": 0,
+      "Defects Liability & Structural Rectification": 0,
+      "Force Majeure & Uncontrollable Delays": 0,
+      "Dispute Resolution & Jurisdiction": 0,
+      "RERA & Statutory Approvals": 0,
+      "Maintenance & Additional Levies": 0,
+      "General Terms & Covenants": 0
+    },
+    "Alteration of Layout & Specifications": {
+      "Possession & Handover": 0,
+      "Payment Milestones & Delay Interest": 0,
+      "Carpet Area & Measurement Adjustments": 0,
+      "Cancellation & Earnest Money Forfeiture": 0,
+      "Alteration of Layout & Specifications": 5,
+      "Defects Liability & Structural Rectification": 0,
+      "Force Majeure & Uncontrollable Delays": 0,
+      "Dispute Resolution & Jurisdiction": 0,
+      "RERA & Statutory Approvals": 0,
+      "Maintenance & Additional Levies": 0,
+      "General Terms & Covenants": 0
+    },
+    "Defects Liability & Structural Rectification": {
+      "Possession & Handover": 0,
+      "Payment Milestones & Delay Interest": 0,
+      "Carpet Area & Measurement Adjustments": 0,
+      "Cancellation & Earnest Money Forfeiture": 0,
+      "Alteration of Layout & Specifications": 0,
+      "Defects Liability & Structural Rectification": 6,
+      "Force Majeure & Uncontrollable Delays": 0,
+      "Dispute Resolution & Jurisdiction": 0,
+      "RERA & Statutory Approvals": 0,
+      "Maintenance & Additional Levies": 0,
+      "General Terms & Covenants": 0
+    },
+    "Force Majeure & Uncontrollable Delays": {
+      "Possession & Handover": 6,
+      "Payment Milestones & Delay Interest": 0,
+      "Carpet Area & Measurement Adjustments": 0,
+      "Cancellation & Earnest Money Forfeiture": 0,
+      "Alteration of Layout & Specifications": 0,
+      "Defects Liability & Structural Rectification": 0,
+      "Force Majeure & Uncontrollable Delays": 0,
+      "Dispute Resolution & Jurisdiction": 0,
+      "RERA & Statutory Approvals": 0,
+      "Maintenance & Additional Levies": 0,
+      "General Terms & Covenants": 0
+    },
+    "Dispute Resolution & Jurisdiction": {
+      "Possession & Handover": 0,
+      "Payment Milestones & Delay Interest": 0,
+      "Carpet Area & Measurement Adjustments": 0,
+      "Cancellation & Earnest Money Forfeiture": 0,
+      "Alteration of Layout & Specifications": 0,
+      "Defects Liability & Structural Rectification": 0,
+      "Force Majeure & Uncontrollable Delays": 0,
+      "Dispute Resolution & Jurisdiction": 0,
+      "RERA & Statutory Approvals": 6,
+      "Maintenance & Additional Levies": 0,
+      "General Terms & Covenants": 0
+    },
+    "RERA & Statutory Approvals": {
+      "Possession & Handover": 0,
+      "Payment Milestones & Delay Interest": 0,
+      "Carpet Area & Measurement Adjustments": 0,
+      "Cancellation & Earnest Money Forfeiture": 0,
+      "Alteration of Layout & Specifications": 0,
+      "Defects Liability & Structural Rectification": 0,
+      "Force Majeure & Uncontrollable Delays": 6,
+      "Dispute Resolution & Jurisdiction": 0,
+      "RERA & Statutory Approvals": 0,
+      "Maintenance & Additional Levies": 0,
+      "General Terms & Covenants": 0
+    },
+    "Maintenance & Additional Levies": {
+      "Possession & Handover": 0,
+      "Payment Milestones & Delay Interest": 0,
+      "Carpet Area & Measurement Adjustments": 0,
+      "Cancellation & Earnest Money Forfeiture": 0,
+      "Alteration of Layout & Specifications": 0,
+      "Defects Liability & Structural Rectification": 0,
+      "Force Majeure & Uncontrollable Delays": 0,
+      "Dispute Resolution & Jurisdiction": 0,
+      "RERA & Statutory Approvals": 0,
+      "Maintenance & Additional Levies": 5,
+      "General Terms & Covenants": 0
+    },
+    "General Terms & Covenants": {
+      "Possession & Handover": 0,
+      "Payment Milestones & Delay Interest": 0,
+      "Carpet Area & Measurement Adjustments": 0,
+      "Cancellation & Earnest Money Forfeiture": 0,
+      "Alteration of Layout & Specifications": 0,
+      "Defects Liability & Structural Rectification": 0,
+      "Force Majeure & Uncontrollable Delays": 0,
+      "Dispute Resolution & Jurisdiction": 0,
+      "RERA & Statutory Approvals": 0,
+      "Maintenance & Additional Levies": 0,
+      "General Terms & Covenants": 1
+    }
+  },
+  "misclassifications_count": 24,
+  "sample_misclassifications": [
+    {
+      "clause_id": "CG-STAT-CEN-0028",
+      "title": "Clause: Extension of Delivery Deadlines",
+      "actual": "Force Majeure & Uncontrollable Delays",
+      "predicted": "Possession & Handover",
+      "confidence": 0.48,
+      "text_snippet": "Where construction progress is suspended due to judicial restraining orders or statutory moratoriums affecting New Delhi..."
+    },
+    {
+      "clause_id": "CG-STAT-HAR-0138",
+      "title": "Clause: Taxes and Remittance",
+      "actual": "Payment Milestones & Delay Interest",
+      "predicted": "Maintenance & Additional Levies",
+      "confidence": 0.48,
+      "text_snippet": "All statutory levies including GST, property taxes, and stamp duties are payable over and above Rs. 1,80,00,000/- direct..."
+    },
+    {
+      "clause_id": "CG-STAT-TAM-0201",
+      "title": "Clause: Extension of Delivery Deadlines",
+      "actual": "Force Majeure & Uncontrollable Delays",
+      "predicted": "Possession & Handover",
+      "confidence": 0.48,
+      "text_snippet": "Where construction progress is suspended due to judicial restraining orders or statutory moratoriums affecting Chennai, ..."
+    },
+    {
+      "clause_id": "CG-STAT-DEL-0249",
+      "title": "Clause: Environmental Clearances and Fire Safety NOC",
+      "actual": "RERA & Statutory Approvals",
+      "predicted": "Force Majeure & Uncontrollable Delays",
+      "confidence": 0.48,
+      "text_snippet": "The Promoter warrants that the state pollution control board and municipal fire service have accorded unconditional appr..."
+    },
+    {
+      "clause_id": "CG-STAT-HAR-0166",
+      "title": "Clause: Environmental Clearances and Fire Safety NOC",
+      "actual": "RERA & Statutory Approvals",
+      "predicted": "Force Majeure & Uncontrollable Delays",
+      "confidence": 0.48,
+      "text_snippet": "The Developer warrants that the state pollution control board and municipal fire service have accorded unconditional app..."
+    },
+    {
+      "clause_id": "CG-STAT-KAR-0095",
+      "title": "Clause: Taxes and Remittance",
+      "actual": "Payment Milestones & Delay Interest",
+      "predicted": "Maintenance & Additional Levies",
+      "confidence": 0.48,
+      "text_snippet": "All statutory levies including GST, property taxes, and stamp duties are payable over and above Rs. 98,00,000/- directly..."
+    },
+    {
+      "clause_id": "CG-STAT-CEN-0008",
+      "title": "Clause: Taxes and Remittance",
+      "actual": "Payment Milestones & Delay Interest",
+      "predicted": "Maintenance & Additional Levies",
+      "confidence": 0.48,
+      "text_snippet": "All statutory levies including GST, property taxes, and stamp duties are payable over and above Rs. 1,45,00,000/- (Rupee..."
+    },
+    {
+      "clause_id": "CG-STAT-KAR-0123",
+      "title": "Clause: Environmental Clearances and Fire Safety NOC",
+      "actual": "RERA & Statutory Approvals",
+      "predicted": "Force Majeure & Uncontrollable Delays",
+      "confidence": 0.48,
+      "text_snippet": "The Promoter warrants that the state pollution control board and municipal fire service have accorded unconditional appr..."
+    },
+    {
+      "clause_id": "CG-STAT-MAH-0072",
+      "title": "Clause: Extension of Delivery Deadlines",
+      "actual": "Force Majeure & Uncontrollable Delays",
+      "predicted": "Possession & Handover",
+      "confidence": 0.48,
+      "text_snippet": "Where construction progress is suspended due to judicial restraining orders or statutory moratoriums affecting Mumbai, t..."
+    },
+    {
+      "clause_id": "CG-STAT-MAH-0076",
+      "title": "Clause: Exclusive Tribunal Authority",
+      "actual": "Dispute Resolution & Jurisdiction",
+      "predicted": "RERA & Statutory Approvals",
+      "confidence": 0.48,
+      "text_snippet": "Complaints regarding unfair practices or contravention of Maharashtra Real Estate (Regulation and Development) Rules, 20..."
+    }
+  ]
+}

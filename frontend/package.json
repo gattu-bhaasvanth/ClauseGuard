@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --test tests/rag_ui.test.mjs"
+    "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
