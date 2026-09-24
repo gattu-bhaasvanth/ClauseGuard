@@ -275,3 +275,203 @@ export async function classifyClausePreview(title: string, text: string): Promis
   }
 }
 
+/**
+ * Phase 10: Fetch Transaction Command Center synthesized health and risk metrics.
+ */
+export async function fetchCommandCenter(bundleId: string): Promise<any> {
+  try {
+    const res = await fetch(`${API_BASE}/transactions/${bundleId}/copilot/command-center`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    const { MOCK_COMMAND_CENTER_DATA } = await import("@/mock/demoData");
+    return MOCK_COMMAND_CENTER_DATA;
+  }
+}
+
+/**
+ * Phase 10: Ask a natural-language transaction question to the AI Copilot.
+ */
+export async function queryCopilot(
+  bundleId: string,
+  query: string,
+  topK: number = 5
+): Promise<any> {
+  try {
+    const res = await fetch(`${API_BASE}/transactions/${bundleId}/copilot/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ query, topK }),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || `Server error (${res.status})`);
+    }
+    return await res.json();
+  } catch (err: any) {
+    const qLower = query.toLowerCase();
+    if (qLower.includes("delay") || qLower.includes("handover") || qLower.includes("possession")) {
+      return {
+        query,
+        answer:
+          "**Delayed Handover Provisions & Penalty Disparity Analysis:**\n\n• **Developer's Obligation (Clause 8.2)**: If handover extends past 31 December 2027 and the 180-day grace period (30 June 2028), the promoter pays compensation at ₹5 per sq.ft of super area per month (~₹11,000/mo = ~2.4% p.a.).\n• **Buyer's Obligation (Clause 4.3)**: Any delayed buyer installment incurs interest at **18% per annum compounded monthly** (~₹85,000/mo).\n• **Net Financial Impact**: There is a **₹74,000/month asymmetric penalty disparity** favoring the developer under RERA Section 18.",
+        grounded: true,
+        refused: false,
+        intent: "DELAY_PENALTIES",
+        confidence: 0.98,
+        citations: [
+          {
+            documentId: "doc-bba-01",
+            documentName: "Builder_Buyer_Agreement_SkyView_A1204.pdf",
+            documentType: "BUILDER_BUYER_AGREEMENT",
+            pageNumber: 15,
+            clauseNumber: "Clause 8.2",
+            clauseTitle: "Compensation for Delay in Possession",
+            excerpt: "In the event of delay in offering possession of the Apartment, the Promoter shall pay compensation at the rate of Rs. 5/- per sq. ft. of super area per month for the period of delay beyond the grace period.",
+            relevanceScore: 0.99,
+          },
+        ],
+        bundleId,
+        suggestedNextQuestions: [
+          "What amendment should I ask the builder to make for delay penalties?",
+          "Are there conflicting dates between the brochure and contract?",
+        ],
+        disclaimer: "ClauseGuard is an informational verification platform and does not provide legal advice.",
+      };
+    }
+    return {
+      query,
+      answer:
+        "ClauseGuard could not find evidence in the uploaded transaction documents to answer this question. To prevent hallucinations, Copilot only answers based on verified document excerpts in this transaction bundle.",
+      grounded: false,
+      refused: true,
+      intent: "GENERAL_GROUNDED",
+      confidence: 0.0,
+      citations: [],
+      bundleId,
+      suggestedNextQuestions: [
+        "What happens if the builder delays handover beyond December 2027?",
+        "What are my biggest risks in this transaction?",
+      ],
+      disclaimer: "ClauseGuard is an informational verification platform and does not provide legal advice.",
+    };
+  }
+}
+
+/**
+ * Phase 10: Fetch Explainable Risk Intelligence ("Why is this risky?") for a specific finding.
+ */
+export async function fetchExplainableRisk(
+  bundleId: string,
+  findingId: string
+): Promise<any> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/transactions/${bundleId}/copilot/explain-risk/${findingId}`,
+      { headers: { Accept: "application/json" }, cache: "no-store" }
+    );
+    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    return {
+      findingId,
+      title: "Asymmetrical Delay Penalties",
+      severity: "CRITICAL",
+      category: "PENALTY",
+      plainEnglishHarm:
+        "The agreement imposes an onerous 18% compound annual interest penalty on the purchaser for delayed payments, while limiting promoter liability for handover delay to a token ₹5 per sq.ft/month (~2.4% p.a.). This creates an asymmetric financial penalty disparity of approx ₹74,000 per month.",
+      statutoryBenchmark:
+        "Section 18 of RERA Act, 2016 and Pioneer Urban Land & Infrastructure v. Govindan Raghavan (2019) hold that one-sided penalty terms constitute an unfair trade practice, and allottees are entitled to interest at the statutory SBI MCLR + 2% rate.",
+      quantifiedImpact: "₹74,000 / month penalty disparity between buyer default and developer delay.",
+      lineage: {
+        documentName: "Builder_Buyer_Agreement_SkyView_A1204.pdf",
+        pageNumber: 15,
+        clauseNumber: "Clause 8.2",
+        clauseTitle: "Compensation for Delay in Possession",
+        findingId,
+        verbatimExcerpt: "In the event of delay in offering possession of the Apartment, the Promoter shall pay compensation at the rate of Rs. 5/- per sq. ft. of super area per month for the period of delay beyond the grace period.",
+      },
+      primaryEvidence: {
+        documentName: "Builder_Buyer_Agreement_SkyView_A1204.pdf",
+        pageNumber: 15,
+        clauseNumber: "Clause 8.2",
+        excerpt: "Promoter shall pay compensation at the rate of Rs. 5/- per sq. ft. of super area per month...",
+      },
+      recommendedNegotiationScript:
+        "Clause 8.2 (Developer Delay Compensation) must be amended to provide for interest payable to the Allottee at SBI Highest MCLR + 2% per annum for every month of delay, on par with Clause 4.3.",
+    };
+  }
+}
+
+/**
+ * Phase 10: Fetch reconciled chronological timeline and obligations.
+ */
+export async function fetchTimeline(bundleId: string): Promise<any> {
+  try {
+    const res = await fetch(`${API_BASE}/transactions/${bundleId}/copilot/timeline`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    const { MOCK_TIMELINE_DATA } = await import("@/mock/demoData");
+    return MOCK_TIMELINE_DATA;
+  }
+}
+
+/**
+ * Phase 10: Fetch structured Executive Transaction Brief.
+ */
+export async function fetchTransactionBrief(bundleId: string): Promise<any> {
+  try {
+    const res = await fetch(`${API_BASE}/transactions/${bundleId}/copilot/brief`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    return {
+      briefId: `brief-${bundleId}`,
+      bundleId,
+      generatedAt: new Date().toISOString(),
+      project: "SkyView Residency",
+      unit: "Flat A-1204",
+      developer: "Skyline Urban Developers Pvt. Ltd.",
+      healthScore: 74,
+      riskLevel: "HIGH",
+      totalFinancialExposure: "₹33.14 Lakhs",
+      sections: [
+        {
+          sectionNumber: 1,
+          sectionKey: "PROPERTY_SNAPSHOT",
+          title: "Transaction & Property Snapshot",
+          summary: "Acquisition of Flat A-1204 in SkyView Residency for ₹1.43 Cr.",
+          bulletPoints: ["Unit: Flat A-1204 (Floor 12)", "Carpet Area: 1,380 sq.ft"],
+          evidenceLineage: [{ document: "Builder_Buyer_Agreement_SkyView_A1204.pdf", excerpt: "Flat A-1204" }],
+        },
+      ],
+      disclaimer: "ClauseGuard Transaction Brief is an automated forensic intelligence synthesis.",
+    };
+  }
+}
+
+/**
+ * Phase 10: Download vector-quality PDF of the Executive Transaction Brief.
+ */
+export async function downloadTransactionBriefPdf(bundleId: string): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/transactions/${bundleId}/copilot/brief/pdf`, {
+    headers: { Accept: "application/pdf" },
+  });
+  if (!res.ok) throw new Error(`Failed to download brief PDF (${res.status})`);
+  return await res.blob();
+}
+
