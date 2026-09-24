@@ -39,8 +39,102 @@ export async function fetchTransactionById(id: string): Promise<any> {
   } catch (err) {
     if (id === "skyview-a1204") return MOCK_SKYVIEW_TRANSACTION;
     const found = MOCK_ALL_TRANSACTIONS.find((t) => t.id === id);
-    return found || MOCK_SKYVIEW_TRANSACTION;
+    return found || null;
   }
+}
+
+/**
+ * Create a new property transaction workspace on the backend.
+ */
+export async function createTransaction(payload: {
+  projectName: string;
+  unit: string;
+  developer: string;
+  city: string;
+  propertyType?: string;
+  approxPrice?: number;
+  carpetAreaSqFt?: number;
+  superAreaSqFt?: number;
+}): Promise<any> {
+  const res = await fetch(`${API_BASE}/transactions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to create transaction (${res.status})`);
+  }
+  return await res.json();
+}
+
+/**
+ * Upload a transaction document to the backend pipeline.
+ */
+export async function uploadTransactionDocument(
+  bundleId: string,
+  file: File,
+  documentType: string = "OTHER"
+): Promise<any> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("document_type", documentType);
+  formData.append("auto_extract_clauses", "true");
+
+  const res = await fetch(`${API_BASE}/transactions/${bundleId}/documents/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to upload document (${res.status})`);
+  }
+  return await res.json();
+}
+
+/**
+ * Register document metadata directly when raw PDF bytes are simulated or client-managed.
+ */
+export async function registerTransactionDocument(
+  bundleId: string,
+  payload: {
+    file_name: string;
+    document_type: string;
+    file_size?: string;
+    page_count?: number;
+  }
+): Promise<any> {
+  const res = await fetch(`${API_BASE}/transactions/${bundleId}/documents`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to register document (${res.status})`);
+  }
+  return await res.json();
+}
+
+/**
+ * Trigger cross-document consistency verification across an entire transaction bundle.
+ */
+export async function analyzeTransaction(bundleId: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/transactions/${bundleId}/analyze`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to analyze transaction (${res.status})`);
+  }
+  return await res.json();
 }
 
 /**

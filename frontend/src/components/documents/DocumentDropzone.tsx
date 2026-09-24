@@ -23,52 +23,29 @@ export interface SelectedFileItem {
   status: "READY" | "UPLOADING" | "ANALYZED";
 }
 
-const DOCUMENT_TYPE_LABELS: { value: DocumentType; label: string }[] = [
-  { value: "BUILDER_BUYER_AGREEMENT", label: "Builder-Buyer Agreement (BBA)" },
-  { value: "SALE_AGREEMENT", label: "Agreement for Sale" },
-  { value: "ALLOTMENT_LETTER", label: "Allotment Letter" },
-  { value: "PAYMENT_SCHEDULE", label: "Payment Schedule" },
-  { value: "PROJECT_BROCHURE", label: "Project Brochure / Floor Plan" },
-  { value: "NOC_SANCTION_PLAN", label: "Sanction Plan / NOC" },
-  { value: "OTHER", label: "Other Supporting Document" },
+export const DOCUMENT_TYPE_LABELS: { value: DocumentType; label: string; shortLabel: string }[] = [
+  { value: "BUILDER_BUYER_AGREEMENT", label: "Builder-Buyer Agreement (BBA)", shortLabel: "BBA" },
+  { value: "SALE_AGREEMENT", label: "Agreement for Sale", shortLabel: "Sale Agreement" },
+  { value: "ALLOTMENT_LETTER", label: "Allotment Letter", shortLabel: "Allotment Letter" },
+  { value: "PAYMENT_SCHEDULE", label: "Payment Schedule", shortLabel: "Payment Schedule" },
+  { value: "PROJECT_BROCHURE", label: "Project Brochure / Floor Plan", shortLabel: "Brochure" },
+  { value: "NOC_SANCTION_PLAN", label: "Sanction Plan / NOC", shortLabel: "Sanction Plan" },
+  { value: "OTHER", label: "Other Supporting Document", shortLabel: "Other Document" },
 ];
 
 interface DocumentDropzoneProps {
   onFilesChanged?: (files: SelectedFileItem[]) => void;
   className?: string;
+  initialFiles?: SelectedFileItem[];
 }
 
 export function DocumentDropzone({
   onFilesChanged,
   className,
+  initialFiles = [],
 }: DocumentDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState<SelectedFileItem[]>([
-    {
-      id: "demo-file-1",
-      file: new File([""], "Builder_Buyer_Agreement_Draft.pdf"),
-      name: "Builder_Buyer_Agreement_Draft.pdf",
-      sizeFormatted: "4.8 MB",
-      documentType: "BUILDER_BUYER_AGREEMENT",
-      status: "READY",
-    },
-    {
-      id: "demo-file-2",
-      file: new File([""], "Signed_Allotment_Letter.pdf"),
-      name: "Signed_Allotment_Letter.pdf",
-      sizeFormatted: "1.2 MB",
-      documentType: "ALLOTMENT_LETTER",
-      status: "READY",
-    },
-    {
-      id: "demo-file-3",
-      file: new File([""], "SkyView_Official_Brochure.pdf"),
-      name: "SkyView_Official_Brochure.pdf",
-      sizeFormatted: "18.4 MB",
-      documentType: "PROJECT_BROCHURE",
-      status: "READY",
-    },
-  ]);
+  const [selectedFiles, setSelectedFiles] = useState<SelectedFileItem[]>(initialFiles);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatFileSize = (bytes: number): string => {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -21,22 +21,56 @@ import { ClassificationInspectorDrawer } from "@/components/intelligence/Classif
 import { Button } from "@/components/ui/Button";
 import { SeverityBadge } from "@/components/shared/SeverityBadge";
 import { LegalDisclaimerNotice } from "@/components/shared/LegalDisclaimerNotice";
+import { fetchTransactionById } from "@/lib/api";
 
 export default function DocumentAnalysisPage({
   params,
 }: {
   params: { id: string };
 }) {
-  const transaction = MOCK_SKYVIEW_TRANSACTION;
-  const clauses = transaction.clauses;
-  const [selectedClause, setSelectedClause] = useState<ClauseItem>(clauses[0]);
+  const transactionId = params.id || "skyview-a1204";
+  const [transaction, setTransaction] = useState<any>(
+    transactionId === "skyview-a1204" ? MOCK_SKYVIEW_TRANSACTION : null
+  );
+
+  useEffect(() => {
+    if (transactionId === "skyview-a1204") {
+      setTransaction(MOCK_SKYVIEW_TRANSACTION);
+    } else {
+      fetchTransactionById(transactionId)
+        .then((res) => {
+          if (res) setTransaction(res);
+        })
+        .catch(() => {});
+    }
+  }, [transactionId]);
+
+  const clauses = transaction?.clauses || [];
+  const [selectedClause, setSelectedClause] = useState<ClauseItem | null>(clauses[0] || null);
   const [inspectingClause, setInspectingClause] = useState<ClauseItem | null>(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+
+  useEffect(() => {
+    if (clauses.length > 0 && !selectedClause) {
+      setSelectedClause(clauses[0]);
+    }
+  }, [clauses, selectedClause]);
 
   const handleOpenInspector = (clause: ClauseItem) => {
     setInspectingClause(clause);
     setIsInspectorOpen(true);
   };
+
+  if (!transaction) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-zinc-400">Loading analysis workspace...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -58,7 +92,7 @@ export default function DocumentAnalysisPage({
               </span>
             </h1>
             <span className="text-[11px] text-zinc-400">
-              {transaction.title} • {transaction.documents[0].fileName}
+              {transaction.title} • {transaction.documents?.[0]?.fileName || "Document"}
             </span>
           </div>
         </div>
@@ -77,7 +111,7 @@ export default function DocumentAnalysisPage({
         {/* LEFT PANE: Document Viewer Placeholder (7 Columns on large screens) */}
         <div className="lg:col-span-7 h-[700px] lg:h-full flex flex-col">
           <DocumentViewerMock
-            activeClauseId={selectedClause.id}
+            activeClauseId={selectedClause?.id || ""}
             className="flex-1"
           />
         </div>
@@ -88,7 +122,7 @@ export default function DocumentAnalysisPage({
           <div className="h-[360px] p-4 rounded-xl bg-surface border border-surface-border overflow-hidden flex flex-col">
             <ClauseList
               clauses={clauses}
-              selectedClauseId={selectedClause.id}
+              selectedClauseId={selectedClause?.id || ""}
               onSelectClause={(c) => setSelectedClause(c)}
               onInspectClause={handleOpenInspector}
             />
@@ -96,12 +130,18 @@ export default function DocumentAnalysisPage({
 
           {/* Bottom Half of Right Pane: Selected Evidence Inspector */}
           <div className="flex-1">
-            <EvidenceDrawer
-              clause={selectedClause}
-              documentName="Builder-Buyer Agreement"
-              className="h-full"
-              onInspectAI={() => handleOpenInspector(selectedClause)}
-            />
+            {selectedClause ? (
+              <EvidenceDrawer
+                clause={selectedClause}
+                documentName="Builder-Buyer Agreement"
+                className="h-full"
+                onInspectAI={() => handleOpenInspector(selectedClause)}
+              />
+            ) : (
+              <div className="p-6 rounded-xl bg-surface border border-surface-border text-center text-xs text-zinc-400">
+                Select a clause to inspect findings and evidence.
+              </div>
+            )}
           </div>
         </div>
       </div>

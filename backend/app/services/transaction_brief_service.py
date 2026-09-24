@@ -43,8 +43,29 @@ class TransactionBriefService:
         cmd = await transaction_intelligence_orchestrator.get_command_center(session, bundle_id)
         timeline = await timeline_service.get_reconciled_timeline(session, bundle_id)
 
-        sections: List[BriefSectionSchema] = []
+        if bundle.id == "skyview-a1204":
+            sections = self._get_skyview_brief_sections(bundle, cmd, timeline)
+        else:
+            sections = self._get_custom_brief_sections(bundle, cmd, timeline)
 
+        fin = cmd.financialExposure
+        return TransactionBriefSchema(
+            briefId=f"brief-{bundle.id}",
+            bundleId=bundle.id,
+            generatedAt=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+            project=bundle.project,
+            unit=bundle.unit,
+            developer=bundle.developer,
+            healthScore=bundle.health_score if bundle.health_score is not None else 74,
+            riskLevel=cmd.riskLevel,
+            totalFinancialExposure=fin.totalFinancialAtRiskFormatted,
+            sections=sections,
+        )
+
+    def _get_skyview_brief_sections(
+        self, bundle, cmd, timeline
+    ) -> List[BriefSectionSchema]:
+        sections: List[BriefSectionSchema] = []
         # Section 1: Transaction & Property Snapshot
         sections.append(
             BriefSectionSchema(
@@ -246,19 +267,182 @@ class TransactionBriefService:
                 ],
             )
         )
+        return sections
 
-        return TransactionBriefSchema(
-            briefId=f"brief-{bundle.id}",
-            bundleId=bundle.id,
-            generatedAt=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
-            project=bundle.project,
-            unit=bundle.unit,
-            developer=bundle.developer,
-            healthScore=bundle.health_score if bundle.health_score is not None else 74,
-            riskLevel=cmd.riskLevel,
-            totalFinancialExposure=fin.totalFinancialAtRiskFormatted,
-            sections=sections,
+    def _get_custom_brief_sections(
+        self, bundle, cmd, timeline
+    ) -> List[BriefSectionSchema]:
+        sections: List[BriefSectionSchema] = []
+        primary_doc = bundle.documents[0].file_name if bundle.documents else "Uploaded Document"
+        inconsistencies = [f for f in bundle.findings if f.finding_type == "INCONSISTENCY"]
+        risks = [f for f in bundle.findings if f.finding_type == "RISK"]
+
+        # Section 1: Transaction & Property Snapshot
+        sections.append(
+            BriefSectionSchema(
+                sectionNumber=1,
+                sectionKey="PROPERTY_SNAPSHOT",
+                title="Transaction & Property Snapshot",
+                summary=f"Acquisition of {bundle.unit} in {bundle.project}, developed by {bundle.developer}. Agreed total consideration is {cmd.financialExposure.baseConsiderationFormatted}.",
+                bulletPoints=[
+                    f"Unit: {bundle.unit} ({bundle.tower})",
+                    f"Carpet Area: {bundle.carpet_area_sqft:.0f} sq.ft",
+                    f"Super Area: {bundle.super_area_sqft:.0f} sq.ft",
+                    f"Base Consideration: {cmd.financialExposure.baseConsiderationFormatted}",
+                    f"Location: {bundle.location}",
+                ],
+                evidenceLineage=[
+                    {
+                        "document": primary_doc,
+                        "page": 1,
+                        "clause": "Property Schedule",
+                        "excerpt": f"Unit {bundle.unit} in {bundle.project} for total consideration of Rs. {bundle.sale_price:,.0f}.",
+                    }
+                ],
+            )
         )
+
+        # Section 2: Executive Assessment & Health Rating
+        sections.append(
+            BriefSectionSchema(
+                sectionNumber=2,
+                sectionKey="EXECUTIVE_ASSESSMENT",
+                title="Executive Assessment & Health Rating",
+                summary=f"The transaction bundle is evaluated at an overall Health Score of {bundle.health_score}/100 ({cmd.riskLevel} Risk).",
+                bulletPoints=[
+                    f"Transaction Health Index: {bundle.health_score}/100",
+                    f"Total Documents Verified: {len(bundle.documents)} files.",
+                    f"Issues Detected: {len(bundle.findings)} findings across uploaded documents.",
+                ],
+                evidenceLineage=[
+                    {
+                        "document": "System Audit Score",
+                        "page": 1,
+                        "clause": "Composite Scoring Engine",
+                        "excerpt": f"Overall Health Index: {bundle.health_score}/100.",
+                    }
+                ],
+            )
+        )
+
+        # Section 3: Financial Exposure Matrix
+        fin = cmd.financialExposure
+        sections.append(
+            BriefSectionSchema(
+                sectionNumber=3,
+                sectionKey="FINANCIAL_EXPOSURE",
+                title="Financial Exposure Matrix",
+                summary=f"Total capital at risk is quantified at {fin.totalFinancialAtRiskFormatted}.",
+                bulletPoints=[
+                    f"Base Consideration: {fin.baseConsiderationFormatted}",
+                    f"Earnest Money at Risk: {fin.earnestMoneyForfeitRiskFormatted}",
+                    f"Statutory Ceiling (RERA Sec 13): {fin.statutoryForfeitLimitFormatted}",
+                    f"Monthly Late Penalty Asymmetry: {fin.monthlyAsymmetryCostFormatted}",
+                ],
+                evidenceLineage=[
+                    {
+                        "document": primary_doc,
+                        "page": 1,
+                        "clause": "Financial Terms",
+                        "excerpt": f"Agreed consideration of {fin.baseConsiderationFormatted}.",
+                    }
+                ],
+            )
+        )
+
+        # Section 4: Critical Contractual Milestones
+        milestone_bullets = [
+            f"{ev.title}: {ev.eventDate or 'Milestone Dependent'} ({ev.dateType}) — {ev.description}"
+            for ev in timeline.events[:4]
+        ] or [f"Target Possession Date: {bundle.possession_date or 'To be specified'}"]
+        sections.append(
+            BriefSectionSchema(
+                sectionNumber=4,
+                sectionKey="CONTRACTUAL_MILESTONES",
+                title="Critical Contractual Milestones & Timeline",
+                summary=f"Identified {timeline.totalEvents} key chronological milestones across the bundle.",
+                bulletPoints=milestone_bullets,
+                evidenceLineage=[
+                    {
+                        "document": primary_doc,
+                        "page": 1,
+                        "clause": "Possession Terms",
+                        "excerpt": f"Target handover: {bundle.possession_date or 'Not stated'}.",
+                    }
+                ],
+            )
+        )
+
+        # Section 5: Key Discrepancies
+        discrepancy_bullets = [
+            f"{f.title}: {f.description}" for f in inconsistencies[:3]
+        ] or ["No cross-document discrepancies detected across current bundle documents."]
+        discrepancy_lineage = [
+            {
+                "document": f.primary_evidence.get("documentName", primary_doc) if isinstance(f.primary_evidence, dict) else primary_doc,
+                "page": f.primary_evidence.get("pageNumber", 1) if isinstance(f.primary_evidence, dict) else 1,
+                "clause": f.primary_evidence.get("clauseNumber", "Discrepancy Evidence") if isinstance(f.primary_evidence, dict) else "Discrepancy Evidence",
+                "excerpt": f.primary_evidence.get("excerpt", f.description) if isinstance(f.primary_evidence, dict) else f.description,
+            }
+            for f in inconsistencies[:2]
+        ] or [{"document": primary_doc, "page": 1, "clause": "Verification", "excerpt": "No discrepancies found."}]
+        sections.append(
+            BriefSectionSchema(
+                sectionNumber=5,
+                sectionKey="DISCREPANCIES",
+                title="Key Discrepancies & Document Divergence",
+                summary=f"Identified {len(inconsistencies)} cross-document discrepancies in this transaction.",
+                bulletPoints=discrepancy_bullets,
+                evidenceLineage=discrepancy_lineage,
+            )
+        )
+
+        # Section 6: High-Priority Asymmetric Clauses
+        risk_bullets = [
+            f"{r.title}: {r.description}" for r in risks[:3]
+        ] or ["No high-priority asymmetric clauses flagged for this transaction."]
+        risk_lineage = [
+            {
+                "document": r.primary_evidence.get("documentName", primary_doc) if isinstance(r.primary_evidence, dict) else primary_doc,
+                "page": r.primary_evidence.get("pageNumber", 1) if isinstance(r.primary_evidence, dict) else 1,
+                "clause": r.primary_evidence.get("clauseNumber", "Risk Clause") if isinstance(r.primary_evidence, dict) else "Risk Clause",
+                "excerpt": r.primary_evidence.get("excerpt", r.description) if isinstance(r.primary_evidence, dict) else r.description,
+            }
+            for r in risks[:2]
+        ] or [{"document": primary_doc, "page": 1, "clause": "Clause Audit", "excerpt": "No high risks detected."}]
+        sections.append(
+            BriefSectionSchema(
+                sectionNumber=6,
+                sectionKey="ASYMMETRIC_CLAUSES",
+                title="High-Priority Asymmetric Clauses",
+                summary=f"Identified {len(risks)} contractual risk clauses in this transaction.",
+                bulletPoints=risk_bullets,
+                evidenceLineage=risk_lineage,
+            )
+        )
+
+        # Section 7: Action Plan
+        action_bullets = [
+            f"{act.title} ({act.severity}): {act.recommendedAction}" for act in cmd.priorityActions[:5]
+        ] or ["Review agreement terms with qualified real estate legal counsel before signing."]
+        sections.append(
+            BriefSectionSchema(
+                sectionNumber=7,
+                sectionKey="ACTION_PLAN",
+                title="Recommended Buyer Action Plan",
+                summary="Actionable steps to resolve identified risks before executing binding agreements.",
+                bulletPoints=action_bullets,
+                evidenceLineage=[
+                    {
+                        "document": "ClauseGuard Audit Plan",
+                        "page": 1,
+                        "clause": "Pre-Execution Checklist",
+                        "excerpt": "Address flagged contractual obligations and request written clarifications.",
+                    }
+                ],
+            )
+        )
+        return sections
 
     def generate_pdf(self, brief: TransactionBriefSchema) -> bytes:
         """Renders vector-quality multi-page PDF briefing document using PyMuPDF."""

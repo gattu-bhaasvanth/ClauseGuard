@@ -67,19 +67,20 @@ class TransactionCopilotService:
 
         intent = self.detect_intent(raw_query)
 
-        # 1. Handle specialized bundle synthesis intents
-        if intent == "SUMMARY":
-            return await self._synthesize_summary(session, bundle, raw_query)
-        elif intent == "TOP_RISKS":
-            return await self._synthesize_top_risks(session, bundle, raw_query)
-        elif intent == "PRE_POSSESSION_OBLIGATIONS":
-            return await self._synthesize_obligations(session, bundle, raw_query)
-        elif intent == "DELAY_PENALTIES":
-            return await self._synthesize_delay_penalties(session, bundle, raw_query)
-        elif intent == "DATE_CONFLICTS":
-            return await self._synthesize_date_conflicts(session, bundle, raw_query)
-        elif intent == "AMENDMENT_RECOMMENDATIONS":
-            return await self._synthesize_amendments(session, bundle, raw_query)
+        # 1. Handle specialized bundle synthesis intents (scoped to demo bundle)
+        if bundle.id == "skyview-a1204":
+            if intent == "SUMMARY":
+                return await self._synthesize_summary(session, bundle, raw_query)
+            elif intent == "TOP_RISKS":
+                return await self._synthesize_top_risks(session, bundle, raw_query)
+            elif intent == "PRE_POSSESSION_OBLIGATIONS":
+                return await self._synthesize_obligations(session, bundle, raw_query)
+            elif intent == "DELAY_PENALTIES":
+                return await self._synthesize_delay_penalties(session, bundle, raw_query)
+            elif intent == "DATE_CONFLICTS":
+                return await self._synthesize_date_conflicts(session, bundle, raw_query)
+            elif intent == "AMENDMENT_RECOMMENDATIONS":
+                return await self._synthesize_amendments(session, bundle, raw_query)
 
         # 2. General Grounded RAG query
         rag_res = await self.rag_service.query_transaction(

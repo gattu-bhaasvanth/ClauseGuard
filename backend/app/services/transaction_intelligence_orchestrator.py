@@ -178,58 +178,84 @@ class TransactionIntelligenceOrchestrator:
         ]
 
         # Priority Action Items
-        priority_actions: List[PriorityActionItemSchema] = [
-            PriorityActionItemSchema(
-                id="act-01",
-                title="Cap Earnest Money Forfeiture to 10%",
-                category="NEGOTIATION",
-                severity="CRITICAL",
-                description="Clause 6.1 stipulates 20% forfeiture of total consideration upon termination. RERA Section 13 mandates a maximum 10% earnest money ceiling.",
-                clauseReference="Clause 6.1",
-                documentName="Builder_Buyer_Agreement_SkyView_A1204.pdf",
-                recommendedAction="Issue amendment request to restrict forfeiture to a maximum of 10% of base consideration and require 30-day cure notice.",
-            ),
-            PriorityActionItemSchema(
-                id="act-02",
-                title="Align Delay Compensation to Statutory Reciprocal Rate",
-                category="NEGOTIATION",
-                severity="CRITICAL",
-                description="Clause 8.2 pays token ₹5/sq.ft/month for handover delays (~2.4% p.a.) while Clause 4.3 charges 18% p.a. on buyer delays.",
-                clauseReference="Clause 8.2 & Clause 4.3",
-                documentName="Builder_Buyer_Agreement_SkyView_A1204.pdf",
-                recommendedAction="Demand reciprocal interest parity under RERA Section 18 (SBI Highest MCLR + 2%, approx 10.75% p.a.) for developer default.",
-            ),
-            PriorityActionItemSchema(
-                id="act-03",
-                title="Reconcile Handover Date Discrepancy",
-                category="LEGAL_REVIEW",
-                severity="HIGH",
-                description="Sales Brochure promised handover by 31 December 2026, whereas BBA Clause 11.2 states 31 December 2027 plus 180 days grace.",
-                clauseReference="Clause 11.2 vs Brochure Page 2",
-                documentName="Builder_Buyer_Agreement_SkyView_A1204.pdf",
-                recommendedAction="Request written addendum confirming the binding handover deadline and specifying compensation triggers from the earlier date.",
-            ),
-            PriorityActionItemSchema(
-                id="act-04",
-                title="Demand Consideration Adjustment for Area Shortfall",
-                category="NEGOTIATION",
-                severity="HIGH",
-                description="Actual agreement carpet area is 1,380 sq.ft compared to 1,450 sq.ft advertised, creating a ₹4.64 Lakhs uncompensated shortfall.",
-                clauseReference="BBA Schedule A vs Sales Brochure",
-                documentName="Builder_Buyer_Agreement_SkyView_A1204.pdf",
-                recommendedAction="Require pro-rata credit note of ₹4,63,950 against the final installment if the registered deed conveys 1,380 sq.ft.",
-            ),
-            PriorityActionItemSchema(
-                id="act-05",
-                title="Request Sanctioned Building Plan & Fire/Pollution NOC",
-                category="DOCUMENT_REQUEST",
-                severity="MEDIUM",
-                description="Statutory authority approved layout drawings and fire safety clearances are absent from the document bundle.",
-                clauseReference="Statutory Verification",
-                documentName="Transaction Bundle",
-                recommendedAction="Require promoter to furnish certified copies of the Sanctioned Layout and Commencement Certificate before paying next installment.",
-            ),
-        ]
+        if bundle.id == "skyview-a1204":
+            priority_actions: List[PriorityActionItemSchema] = [
+                PriorityActionItemSchema(
+                    id="act-01",
+                    title="Cap Earnest Money Forfeiture to 10%",
+                    category="NEGOTIATION",
+                    severity="CRITICAL",
+                    description="Clause 6.1 stipulates 20% forfeiture of total consideration upon termination. RERA Section 13 mandates a maximum 10% earnest money ceiling.",
+                    clauseReference="Clause 6.1",
+                    documentName="Builder_Buyer_Agreement_SkyView_A1204.pdf",
+                    recommendedAction="Issue amendment request to restrict forfeiture to a maximum of 10% of base consideration and require 30-day cure notice.",
+                ),
+                PriorityActionItemSchema(
+                    id="act-02",
+                    title="Align Delay Compensation to Statutory Reciprocal Rate",
+                    category="NEGOTIATION",
+                    severity="CRITICAL",
+                    description="Clause 8.2 pays token ₹5/sq.ft/month for handover delays (~2.4% p.a.) while Clause 4.3 charges 18% p.a. on buyer delays.",
+                    clauseReference="Clause 8.2 & Clause 4.3",
+                    documentName="Builder_Buyer_Agreement_SkyView_A1204.pdf",
+                    recommendedAction="Demand reciprocal interest parity under RERA Section 18 (SBI Highest MCLR + 2%, approx 10.75% p.a.) for developer default.",
+                ),
+                PriorityActionItemSchema(
+                    id="act-03",
+                    title="Reconcile Handover Date Discrepancy",
+                    category="LEGAL_REVIEW",
+                    severity="HIGH",
+                    description="Sales Brochure promised handover by 31 December 2026, whereas BBA Clause 11.2 states 31 December 2027 plus 180 days grace.",
+                    clauseReference="Clause 11.2 vs Brochure Page 2",
+                    documentName="Builder_Buyer_Agreement_SkyView_A1204.pdf",
+                    recommendedAction="Request written addendum confirming the binding handover deadline and specifying compensation triggers from the earlier date.",
+                ),
+                PriorityActionItemSchema(
+                    id="act-04",
+                    title="Demand Consideration Adjustment for Area Shortfall",
+                    category="NEGOTIATION",
+                    severity="HIGH",
+                    description="Actual agreement carpet area is 1,380 sq.ft compared to 1,450 sq.ft advertised, creating a ₹4.64 Lakhs uncompensated shortfall.",
+                    clauseReference="BBA Schedule A vs Sales Brochure",
+                    documentName="Builder_Buyer_Agreement_SkyView_A1204.pdf",
+                    recommendedAction="Require pro-rata credit note of ₹4,63,950 against the final installment if the registered deed conveys 1,380 sq.ft.",
+                ),
+                PriorityActionItemSchema(
+                    id="act-05",
+                    title="Request Sanctioned Building Plan & Fire/Pollution NOC",
+                    category="DOCUMENT_REQUEST",
+                    severity="MEDIUM",
+                    description="Statutory authority approved layout drawings and fire safety clearances are absent from the document bundle.",
+                    clauseReference="Statutory Verification",
+                    documentName="Transaction Bundle",
+                    recommendedAction="Require promoter to furnish certified copies of the Sanctioned Layout and Commencement Certificate before paying next installment.",
+                ),
+            ]
+        else:
+            priority_actions = []
+            for idx, finding in enumerate(findings[:5]):
+                doc_cite = (
+                    finding.primary_evidence.get("documentName", bundle.documents[0].file_name if bundle.documents else "Uploaded Document")
+                    if isinstance(finding.primary_evidence, dict)
+                    else (bundle.documents[0].file_name if bundle.documents else "Uploaded Document")
+                )
+                clause_cite = (
+                    finding.primary_evidence.get("clauseNumber", finding.primary_evidence.get("clause", "Agreement Clause"))
+                    if isinstance(finding.primary_evidence, dict)
+                    else "Agreement Clause"
+                )
+                priority_actions.append(
+                    PriorityActionItemSchema(
+                        id=f"act-{idx+1:02d}",
+                        title=finding.title,
+                        category="LEGAL_REVIEW" if finding.finding_type == "INCONSISTENCY" else "NEGOTIATION",
+                        severity=finding.severity,
+                        description=finding.description,
+                        clauseReference=clause_cite,
+                        documentName=doc_cite,
+                        recommendedAction=finding.recommendation_note or "Review this clause with legal counsel.",
+                    )
+                )
 
         health_score = bundle.health_score if bundle.health_score is not None else 78
         risk_level = "HIGH" if health_score < 60 else "MEDIUM" if health_score < 85 else "LOW"
@@ -263,7 +289,12 @@ class TransactionIntelligenceOrchestrator:
 
         # Map 5-tier lineage
         primary_ev = matched_finding.primary_evidence or {}
-        doc_name = primary_ev.get("documentName") or primary_ev.get("document", "Builder_Buyer_Agreement_SkyView_A1204.pdf")
+        fallback_doc = (
+            "Builder_Buyer_Agreement_SkyView_A1204.pdf"
+            if bundle.id == "skyview-a1204"
+            else (bundle.documents[0].file_name if bundle.documents else "Document")
+        )
+        doc_name = primary_ev.get("documentName") or primary_ev.get("document") or fallback_doc
         page_num = primary_ev.get("pageNumber") or primary_ev.get("page", 1)
         clause_ref = primary_ev.get("clause") or primary_ev.get("clauseNumber", "Clause 8.2")
         excerpt = primary_ev.get("excerpt") or primary_ev.get("text", matched_finding.description)

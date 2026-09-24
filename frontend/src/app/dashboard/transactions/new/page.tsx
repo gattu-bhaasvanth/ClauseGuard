@@ -15,35 +15,98 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { DocumentDropzone, SelectedFileItem } from "@/components/documents/DocumentDropzone";
+import {
+  DocumentDropzone,
+  SelectedFileItem,
+  DOCUMENT_TYPE_LABELS,
+} from "@/components/documents/DocumentDropzone";
 import { LegalDisclaimerNotice } from "@/components/shared/LegalDisclaimerNotice";
+import {
+  createTransaction,
+  uploadTransactionDocument,
+  registerTransactionDocument,
+  analyzeTransaction,
+} from "@/lib/api";
 
 export default function NewTransactionPage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form State
+  // Form State starts clean for a newly created transaction
   const [formData, setFormData] = useState({
-    projectName: "SkyView Residency",
-    unit: "Flat A-1204",
-    developer: "Skyline Urban Developers Pvt. Ltd.",
-    city: "Gurgaon, Haryana",
+    projectName: "",
+    unit: "",
+    developer: "",
+    city: "",
     propertyType: "Residential Apartment",
-    approxPrice: "₹ 1,42,50,000",
+    approxPrice: "",
   });
 
   const [files, setFiles] = useState<SelectedFileItem[]>([]);
+
+  const handleLaunchAnalysis = async () => {
+    setIsSubmitting(true);
+    try {
+      const cleanPrice = formData.approxPrice.replace(/[^0-9.]/g, "");
+      const numericPrice = cleanPrice ? parseFloat(cleanPrice) : 7500000;
+
+      const created = await createTransaction({
+        projectName: formData.projectName.trim() || "Custom Property Transaction",
+        unit: formData.unit.trim() || "Unit 101",
+        developer: formData.developer.trim() || "Independent Developer",
+        city: formData.city.trim() || "Hyderabad, Telangana",
+        propertyType: formData.propertyType || "Residential Apartment",
+        approxPrice: numericPrice,
+        carpetAreaSqFt: 1200.0,
+        superAreaSqFt: 1600.0,
+      });
+
+      const txId = created.id;
+
+      for (const item of files) {
+        if (item.file && item.file.size > 0) {
+          try {
+            await uploadTransactionDocument(txId, item.file, item.documentType);
+          } catch (uploadErr) {
+            console.warn("Upload failed, registering metadata:", uploadErr);
+            await registerTransactionDocument(txId, {
+              file_name: item.name,
+              document_type: item.documentType,
+              file_size: item.sizeFormatted,
+              page_count: 5,
+            });
+          }
+        } else {
+          await registerTransactionDocument(txId, {
+            file_name: item.name,
+            document_type: item.documentType,
+            file_size: item.sizeFormatted || "1.5 MB",
+            page_count: 5,
+          });
+        }
+      }
+
+      if (files.length > 0) {
+        try {
+          await analyzeTransaction(txId);
+        } catch (e) {
+          console.warn("Analysis trigger notification:", e);
+        }
+      }
+
+      router.push(`/dashboard/transactions/${txId}`);
+    } catch (err) {
+      console.error("Failed to launch custom transaction analysis:", err);
+      setIsSubmitting(false);
+    }
+  };
 
   const handleNextStep = () => {
     if (currentStep < 3) {
       setCurrentStep((prev) => (prev + 1) as 1 | 2 | 3);
     } else {
-      // Simulate analysis launch
-      setIsSubmitting(true);
-      setTimeout(() => {
-        router.push("/dashboard/transactions/skyview-a1204");
-      }, 1200);
+      handleLaunchAnalysis();
     }
   };
 
@@ -212,7 +275,7 @@ export default function NewTransactionPage() {
       {/* STEP 2: Document Dropzone */}
       {currentStep === 2 && (
         <div className="space-y-4">
-          <DocumentDropzone onFilesChanged={(f) => setFiles(f)} />
+          <DocumentDropzone onFilesChanged={(f) => setFiles(f)} initialFiles={files} />
         </div>
       )}
 
@@ -235,32 +298,80 @@ export default function NewTransactionPage() {
                 Property
               </span>
               <p className="font-semibold text-zinc-100">
-                {formData.projectName} ({formData.unit})
+                {formData.projectName || "Custom Property"} ({formData.unit || "Unit"})
               </p>
-              <p className="text-zinc-400 text-[11px]">{formData.developer}</p>
+              <p className="text-zinc-400 text-[11px]">{formData.developer || "Developer"}</p>
             </div>
             <div>
               <span className="text-[10px] text-zinc-400 uppercase font-semibold block">
                 Documents in Bundle
               </span>
               <p className="font-semibold text-emerald-400 font-mono">
-                3 Documents Configured
+                {files.length === 1
+                  ? "1 Document Configured"
+                  : `${files.length} Documents Configured`}
               </p>
-              <p className="text-zinc-400 text-[11px]">
-                BBA, Allotment Letter, Brochure
-              </p>
+              {files.length === 0 ? (
+                <p className="text-zinc-500 text-[11px]">No documents uploaded</p>
+              ) : files.length === 1 ? (
+                <p className="text-zinc-400 text-[11px] truncate">
+                  {files[0].name} ({DOCUMENT_TYPE_LABELS.find((l) => l.value === files[0].documentType)?.shortLabel || files[0].documentType})
+                </p>
+              ) : (
+                <p className="text-zinc-400 text-[11px] truncate">
+                  {files.map((f) => DOCUMENT_TYPE_LABELS.find((l) => l.value === f.documentType)?.shortLabel || f.documentType).join(", ")}
+                </p>
+              )}
             </div>
           </div>
+
+          {/* Configured Files Breakdown */}
+          {files.length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-surface-border">
+              <span className="text-[10px] text-zinc-400 uppercase font-semibold block">
+                Configured Documents ({files.length}):
+              </span>
+              <div className="space-y-1.5">
+                {files.map((file) => (
+                  <div
+                    key={file.id}
+                    className="flex items-center justify-between p-2.5 rounded-lg bg-surface border border-surface-border text-xs"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FilePlus2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                      <span className="font-medium text-zinc-200 truncate max-w-sm">
+                        {file.name}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 flex-shrink-0">
+                      {DOCUMENT_TYPE_LABELS.find((l) => l.value === file.documentType)?.label || file.documentType}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="p-4 rounded-lg bg-zinc-900/80 border border-zinc-800 text-xs space-y-2">
             <span className="font-semibold text-zinc-200 block">
               What will be analyzed:
             </span>
             <ul className="space-y-1 text-zinc-400 text-[11px] list-disc list-inside">
-              <li>Carpet area and super built-up area variance checks</li>
-              <li>Delivery timelines and unconditional grace period clauses</li>
-              <li>Asymmetry in late payment interest vs. delayed handover compensation</li>
-              <li>Earnest money cancellation and forfeiture exposure</li>
+              <li>Document text extraction and structural clause parsing</li>
+              <li>Statutory compliance and RERA alignment benchmarking</li>
+              {files.length > 1 ? (
+                <>
+                  <li>Cross-document consistency across {files.length} configured documents</li>
+                  <li>Discrepancies in area, possession timelines, and consideration amounts</li>
+                </>
+              ) : files.length === 1 ? (
+                <>
+                  <li>Single-document clause risk analysis for {files[0].name}</li>
+                  <li>Unilateral forfeiture and penalty clause detection</li>
+                </>
+              ) : (
+                <li>Cross-document consistency and contractual risk analysis</li>
+              )}
             </ul>
           </div>
 

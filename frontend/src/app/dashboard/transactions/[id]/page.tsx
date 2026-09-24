@@ -20,6 +20,7 @@ import {
   Bot,
 } from "lucide-react";
 import { MOCK_SKYVIEW_TRANSACTION, MOCK_COMMAND_CENTER_DATA, MOCK_TIMELINE_DATA } from "@/mock/demoData";
+import { Transaction } from "@/types/transaction";
 import { PropertySummaryCard } from "@/components/transactions/PropertySummaryCard";
 import { InconsistencyCard } from "@/components/transactions/InconsistencyCard";
 import { RiskCard } from "@/components/transactions/RiskCard";
@@ -33,11 +34,10 @@ import { ExplainableRiskDrawer } from "@/components/copilot/ExplainableRiskDrawe
 import { IntelligentTimeline } from "@/components/copilot/IntelligentTimeline";
 import { EvidenceLineageGraph } from "@/components/copilot/EvidenceLineageGraph";
 import { TransactionBriefModal } from "@/components/copilot/TransactionBriefModal";
-import { fetchCommandCenter, fetchTimeline } from "@/lib/api";
+import { LegalDisclaimerNotice } from "@/components/shared/LegalDisclaimerNotice";
+import { fetchCommandCenter, fetchTimeline, fetchTransactionById } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { SeverityBadge } from "@/components/shared/SeverityBadge";
-import { LegalDisclaimerNotice } from "@/components/shared/LegalDisclaimerNotice";
 
 export default function TransactionOverviewPage({
   params,
@@ -45,7 +45,10 @@ export default function TransactionOverviewPage({
   params: { id: string };
 }) {
   const transactionId = params.id || "skyview-a1204";
-  const transaction = MOCK_SKYVIEW_TRANSACTION;
+  const [transaction, setTransaction] = useState<Transaction | any>(
+    transactionId === "skyview-a1204" ? MOCK_SKYVIEW_TRANSACTION : null
+  );
+  const [isLoading, setIsLoading] = useState(transactionId !== "skyview-a1204");
 
   const [activeTab, setActiveTab] = useState<
     "command-center" | "timeline" | "lineage" | "inconsistencies" | "risks" | "documents" | "rag"
@@ -60,21 +63,40 @@ export default function TransactionOverviewPage({
   const [isAskModalOpen, setIsAskModalOpen] = useState(false);
 
   // Command Center & Timeline Data
-  const [commandCenterData, setCommandCenterData] = useState<any>(MOCK_COMMAND_CENTER_DATA);
-  const [timelineData, setTimelineData] = useState<any>(MOCK_TIMELINE_DATA);
+  const [commandCenterData, setCommandCenterData] = useState<any>(
+    transactionId === "skyview-a1204" ? MOCK_COMMAND_CENTER_DATA : null
+  );
+  const [timelineData, setTimelineData] = useState<any>(
+    transactionId === "skyview-a1204" ? MOCK_TIMELINE_DATA : null
+  );
 
   useEffect(() => {
-    fetchCommandCenter(transactionId)
-      .then((res) => {
-        if (res) setCommandCenterData(res);
-      })
-      .catch(() => {});
+    if (transactionId === "skyview-a1204") {
+      setTransaction(MOCK_SKYVIEW_TRANSACTION);
+      setCommandCenterData(MOCK_COMMAND_CENTER_DATA);
+      setTimelineData(MOCK_TIMELINE_DATA);
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
+      fetchTransactionById(transactionId)
+        .then((res) => {
+          if (res) setTransaction(res);
+        })
+        .catch(() => {})
+        .finally(() => setIsLoading(false));
 
-    fetchTimeline(transactionId)
-      .then((res) => {
-        if (res) setTimelineData(res);
-      })
-      .catch(() => {});
+      fetchCommandCenter(transactionId)
+        .then((res) => {
+          if (res) setCommandCenterData(res);
+        })
+        .catch(() => {});
+
+      fetchTimeline(transactionId)
+        .then((res) => {
+          if (res) setTimelineData(res);
+        })
+        .catch(() => {});
+    }
   }, [transactionId]);
 
   // Global Cmd+K / Ctrl+K keyboard shortcut to toggle Copilot
@@ -94,6 +116,61 @@ export default function TransactionOverviewPage({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isCopilotOpen, isBriefModalOpen, explainFindingId, isAskModalOpen]);
+
+  const effectiveCommandCenterData = commandCenterData || {
+    bundleId: transaction?.id || transactionId,
+    projectName: transaction?.property?.project || "Custom Transaction",
+    unitNumber: transaction?.property?.unit || "Unit",
+    developerName: transaction?.property?.developer || "Developer",
+    healthScore: transaction?.healthScore || 85,
+    riskLevel: "LOW",
+    financialExposure: {
+      totalFinancialAtRisk: 0,
+      totalFinancialAtRiskFormatted: "₹0",
+      baseConsideration: transaction?.property?.salePrice || 0,
+      baseConsiderationFormatted: "₹0",
+      earnestMoneyForfeitRisk: 0,
+      earnestMoneyForfeitRiskFormatted: "₹0",
+      statutoryForfeitLimit: 0,
+      statutoryForfeitLimitFormatted: "₹0",
+      excessForfeitExposure: 0,
+      excessForfeitExposureFormatted: "₹0",
+      delayInterestRateBuyer: 0,
+      delayCompensationRateDeveloper: 0,
+      monthlyAsymmetryCost: 0,
+      monthlyAsymmetryCostFormatted: "₹0 / mo",
+      areaDiscrepancyCostImpact: 0,
+      areaDiscrepancyCostImpactFormatted: "₹0",
+    },
+    riskVectors: [],
+    priorityActions: [],
+    missingDocumentsCount: 0,
+    totalDocumentsCount: transaction?.documentsCount || 0,
+    totalClausesAnalyzed: transaction?.clauses?.length || 0,
+    totalFindingsCount: transaction?.issuesCount || 0,
+  };
+
+  const effectiveTimelineData = timelineData || {
+    bundleId: transaction?.id || transactionId,
+    events: [],
+    totalEvents: 0,
+    conflictingEventsCount: 0,
+    contractualEventsCount: 0,
+    marketingEventsCount: 0,
+    inferredEventsCount: 0,
+    uncertainEventsCount: 0,
+  };
+
+  if (isLoading || !transaction) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-zinc-400">Loading transaction workspace...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -184,9 +261,13 @@ export default function TransactionOverviewPage({
             Total Capital At Risk
           </span>
           <span className="text-2xl font-bold font-mono text-rose-300 mt-1 block">
-            {commandCenterData.financialExposure?.totalFinancialAtRiskFormatted || "₹33.14L"}
+            {effectiveCommandCenterData.financialExposure?.totalFinancialAtRiskFormatted || "₹0"}
           </span>
-          <span className="text-[11px] text-rose-400/80">Earnest Forfeit + Area Disparity</span>
+          <span className="text-[11px] text-rose-400/80">
+            {effectiveCommandCenterData.financialExposure?.totalFinancialAtRisk > 0
+              ? "Earnest Forfeit + Area Disparity"
+              : "No Exposure Detected"}
+          </span>
         </Card>
 
         <Card className="p-4 border-l-4 border-l-amber-500">
@@ -196,7 +277,9 @@ export default function TransactionOverviewPage({
           <span className="text-2xl font-bold font-mono text-amber-400 mt-1 block">
             {transaction.issuesCount}
           </span>
-          <span className="text-[11px] text-zinc-500">2 Inconsistencies, 4 Risks</span>
+          <span className="text-[11px] text-zinc-500">
+            {transaction.inconsistenciesCount || 0} Inconsistencies, {transaction.risksCount || 0} Risks
+          </span>
         </Card>
 
         <Card className="p-4">
@@ -294,7 +377,7 @@ export default function TransactionOverviewPage({
         {/* Tab 1: Command Center (Phase 10 Cockpit) */}
         {activeTab === "command-center" && (
           <TransactionCommandCenter
-            data={commandCenterData}
+            data={effectiveCommandCenterData}
             onOpenCopilot={() => setIsCopilotOpen(true)}
             onOpenBrief={() => setIsBriefModalOpen(true)}
             onOpenTimeline={() => setActiveTab("timeline")}
@@ -305,7 +388,7 @@ export default function TransactionOverviewPage({
         {/* Tab 2: Timeline & Obligations (Phase 10 Timeline Intelligence) */}
         {activeTab === "timeline" && (
           <IntelligentTimeline
-            timelineData={timelineData}
+            timelineData={effectiveTimelineData}
             onInspectDocument={(docName, page) => {
               // Could navigate to Split Document Viewer
             }}
@@ -342,7 +425,7 @@ export default function TransactionOverviewPage({
             </div>
 
             <div className="space-y-4">
-              {transaction.inconsistencies.map((inc) => (
+              {transaction.inconsistencies.map((inc: any) => (
                 <InconsistencyCard
                   key={inc.id}
                   inconsistency={inc}
@@ -366,7 +449,7 @@ export default function TransactionOverviewPage({
             </div>
 
             <div className="space-y-4">
-              {transaction.risks.map((risk) => (
+              {transaction.risks.map((risk: any) => (
                 <div key={risk.id} className="relative">
                   <RiskCard risk={risk} transactionId={transaction.id} />
                   <div className="mt-2 flex justify-end">

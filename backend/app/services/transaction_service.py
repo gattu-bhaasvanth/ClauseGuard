@@ -119,57 +119,72 @@ def map_bundle_to_detail(bundle: TransactionBundle) -> TransactionDetailSchema:
         for c in bundle.clauses
     ]
 
-    # Deterministic dates & milestone obligations based on bundle
-    dates = [
-        ImportantDateSchema(
-            id="date-01",
-            title="Foundation & 4th Slab Milestone",
-            date="2026-11-15",
-            sourceDoc="Payment_Schedule_Milestone_Plan.pdf",
-            isMilestone=True,
-            status="UPCOMING",
-            description="10% milestone installment due on structural slab casting.",
-        ),
-        ImportantDateSchema(
-            id="date-02",
-            title="Target Possession Handover",
-            date=bundle.possession_date or "2027-12-31",
-            sourceDoc="Agreement for Sale",
-            isMilestone=False,
-            status="TENTATIVE",
-            description=f"Promised contractual handover date with {bundle.grace_period_months}-month grace period.",
-        ),
-    ]
-
-    payments = [
-        PaymentObligationSchema(
-            id="pay-01",
-            milestoneTitle="Booking & Earnest Token",
-            percentage=10.0,
-            amount=bundle.sale_price * 0.10,
-            dueDateCondition="Paid at application",
-            status="PAID",
-            clauseCitation="Allotment Letter, Page 1",
-        ),
-        PaymentObligationSchema(
-            id="pay-02",
-            milestoneTitle="Execution of Sale Agreement",
-            percentage=10.0,
-            amount=bundle.sale_price * 0.10,
-            dueDateCondition="Within 30 days of allotment",
-            status="PAID",
-            clauseCitation="Clause 3.1",
-        ),
-        PaymentObligationSchema(
-            id="pay-03",
-            milestoneTitle="Completion of 4th Slab",
-            percentage=10.0,
-            amount=bundle.sale_price * 0.10,
-            dueDateCondition="Projected 15 Nov 2026",
-            status="PENDING",
-            clauseCitation="Payment Schedule Item 3",
-        ),
-    ]
+    # Dates & milestone obligations
+    if bundle.id == "skyview-a1204":
+        dates = [
+            ImportantDateSchema(
+                id="date-01",
+                title="Foundation & 4th Slab Milestone",
+                date="2026-11-15",
+                sourceDoc="Payment_Schedule_Milestone_Plan.pdf",
+                isMilestone=True,
+                status="UPCOMING",
+                description="10% milestone installment due on structural slab casting.",
+            ),
+            ImportantDateSchema(
+                id="date-02",
+                title="Target Possession Handover",
+                date=bundle.possession_date or "2027-12-31",
+                sourceDoc="Agreement for Sale",
+                isMilestone=False,
+                status="TENTATIVE",
+                description=f"Promised contractual handover date with {bundle.grace_period_months}-month grace period.",
+            ),
+        ]
+        payments = [
+            PaymentObligationSchema(
+                id="pay-01",
+                milestoneTitle="Booking & Earnest Token",
+                percentage=10.0,
+                amount=bundle.sale_price * 0.10,
+                dueDateCondition="Paid at application",
+                status="PAID",
+                clauseCitation="Allotment Letter, Page 1",
+            ),
+            PaymentObligationSchema(
+                id="pay-02",
+                milestoneTitle="Execution of Sale Agreement",
+                percentage=10.0,
+                amount=bundle.sale_price * 0.10,
+                dueDateCondition="Within 30 days of allotment",
+                status="PAID",
+                clauseCitation="Clause 3.1",
+            ),
+            PaymentObligationSchema(
+                id="pay-03",
+                milestoneTitle="Completion of 4th Slab",
+                percentage=10.0,
+                amount=bundle.sale_price * 0.10,
+                dueDateCondition="Projected 15 Nov 2026",
+                status="PENDING",
+                clauseCitation="Payment Schedule Item 3",
+            ),
+        ]
+    else:
+        dates = []
+        if bundle.possession_date:
+            dates.append(
+                ImportantDateSchema(
+                    id=f"date-{bundle.id}-01",
+                    title="Target Possession Handover",
+                    date=bundle.possession_date,
+                    sourceDoc=bundle.documents[0].file_name if bundle.documents else "Agreement",
+                    isMilestone=False,
+                    status="TENTATIVE",
+                    description=f"Promised contractual handover date with {bundle.grace_period_months}-month grace period.",
+                )
+            )
+        payments = []
 
     return TransactionDetailSchema(
         id=bundle.id,
