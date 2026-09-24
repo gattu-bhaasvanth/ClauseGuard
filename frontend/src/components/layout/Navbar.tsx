@@ -21,8 +21,8 @@ export function Navbar() {
               <span className="font-bold text-base tracking-tight text-white">
                 ClauseGuard
               </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-surface-subtle border border-surface-border text-zinc-400">
-                Phase 1
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-subtle border border-surface-border text-emerald-400">
+                v1.0
               </span>
             </div>
             <span className="text-[10px] text-zinc-400 hidden sm:inline-block">

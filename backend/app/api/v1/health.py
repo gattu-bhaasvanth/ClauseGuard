@@ -4,6 +4,8 @@ from sqlalchemy import text
 from app.database import get_db
 from app.config import settings
 
+from datetime import datetime
+
 router = APIRouter(tags=["Health"])
 
 
@@ -20,7 +22,40 @@ async def check_health(db: AsyncSession = Depends(get_db)):
         "status": "healthy" if db_status == "connected" else "degraded",
         "app": settings.APP_NAME,
         "environment": settings.APP_ENV,
-        "version": "0.1.0-phase2",
+        "version": "1.0.0-phase11",
         "database": db_status,
         "llm_provider": settings.LLM_PROVIDER,
     }
+
+
+@router.get("/health/ready")
+async def check_readiness(db: AsyncSession = Depends(get_db)):
+    """Readiness probe: verifies database, storage directories, and local ML status."""
+    from pathlib import Path
+    from app.intelligence.ml.local_inference_engine import local_intelligence_engine
+
+    db_ready = False
+    try:
+        await db.execute(text("SELECT 1"))
+        db_ready = True
+    except Exception:
+        db_ready = False
+
+    storage_ready = Path(settings.STORAGE_LOCAL_DIR).exists()
+    ml_ready = local_intelligence_engine.is_loaded
+
+    is_ready = db_ready and storage_ready
+
+    return {
+        "ready": is_ready,
+        "database": "ready" if db_ready else "error",
+        "storage": "ready" if storage_ready else "error",
+        "ml_engine": "loaded" if ml_ready else "heuristic_fallback_active",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@router.get("/health/live")
+async def check_liveness():
+    """Liveness probe: verifies process is alive and responsive."""
+    return {"status": "alive", "timestamp": datetime.utcnow().isoformat()}

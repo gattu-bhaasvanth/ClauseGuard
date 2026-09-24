@@ -1,6 +1,10 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+
 from app.config import settings
 from app.database import init_db, AsyncSessionLocal
 from app.services.seed_service import seed_demo_data
@@ -20,11 +24,26 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     description="ClauseGuard: AI-Powered Real-Estate Transaction Intelligence Platform API",
-    version="0.1.0-phase2",
+    version="1.0.0-phase11",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response: Response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        return response
+
+
+# Security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Configure CORS for Next.js frontend communication
 app.add_middleware(

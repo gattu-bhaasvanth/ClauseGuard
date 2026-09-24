@@ -40,7 +40,7 @@ export default function LandingPage() {
               Cross-Document Intelligence Platform
             </span>
             <span className="text-zinc-500">•</span>
-            <span className="text-emerald-400">Phase 1 Preview</span>
+            <span className="text-emerald-400">Transaction Copilot Active</span>
           </div>
 
           {/* Heading & Tagline */}

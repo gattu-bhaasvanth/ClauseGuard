@@ -259,11 +259,7 @@ class TransactionIntelligenceOrchestrator:
 
         matched_finding = next((f for f in bundle.findings if f.id == finding_id), None)
         if not matched_finding:
-            # Fallback to first finding or synthetic default
-            if bundle.findings:
-                matched_finding = bundle.findings[0]
-            else:
-                raise ValueError(f"Finding '{finding_id}' not found in bundle '{bundle_id}'.")
+            raise ValueError(f"Finding '{finding_id}' not found in transaction '{bundle_id}'.")
 
         # Map 5-tier lineage
         primary_ev = matched_finding.primary_evidence or {}

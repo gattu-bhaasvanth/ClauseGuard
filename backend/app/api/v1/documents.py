@@ -55,6 +55,28 @@ async def register_document(
     return await transaction_service.add_document_to_transaction(db, transaction_id, payload)
 
 
+MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB production limit
+
+
+async def _get_verified_document(
+    db: AsyncSession, transaction_id: str, document_id: str
+) -> Document:
+    """Strict transaction isolation: verify document belongs to the requested transaction bundle."""
+    result = await db.execute(
+        select(Document).where(
+            Document.id == document_id,
+            Document.bundle_id == transaction_id,
+        )
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document '{document_id}' not found in transaction '{transaction_id}'.",
+        )
+    return doc
+
+
 @router.post(
     "/upload",
     response_model=DocumentIngestionResponseSchema,
@@ -80,10 +102,11 @@ async def upload_and_ingest_document(
 
     # Validate file extension
     filename = file.filename or "uploaded_document.pdf"
-    if not filename.lower().endswith((".pdf", ".png", ".jpg", ".jpeg")):
+    lower_fn = filename.lower()
+    if not lower_fn.endswith((".pdf", ".png", ".jpg", ".jpeg")):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsupported document format. Only PDF and scanned image files are supported.",
+            detail="Unsupported document format. Only PDF and scanned image files (.pdf, .png, .jpg, .jpeg) are supported.",
         )
 
     file_bytes = await file.read()
@@ -93,13 +116,32 @@ async def upload_and_ingest_document(
             detail="Uploaded file is empty.",
         )
 
-    result = await ingestion_pipeline.ingest_document(
-        session=db,
-        bundle_id=transaction_id,
-        file_bytes=file_bytes,
-        original_filename=filename,
-        document_type=document_type,
-    )
+    if len(file_bytes) > MAX_UPLOAD_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Uploaded file exceeds maximum allowed limit of {MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)} MB.",
+        )
+
+    # Magic byte validation for PDFs
+    if lower_fn.endswith(".pdf") and not file_bytes.startswith(b"%PDF"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or corrupt PDF file: missing '%PDF' file header.",
+        )
+
+    try:
+        result = await ingestion_pipeline.ingest_document(
+            session=db,
+            bundle_id=transaction_id,
+            file_bytes=file_bytes,
+            original_filename=filename,
+            document_type=document_type,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Document ingestion failed: {str(e)}",
+        )
 
     # Auto extract clauses and metadata if requested
     if auto_extract_clauses:
@@ -124,6 +166,19 @@ async def upload_and_ingest_document(
 
 
 @router.get(
+    "/{document_id}",
+    response_model=DocumentResponseSchema,
+)
+async def get_document(
+    transaction_id: str,
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Retrieve document details by ID, enforcing strict transaction bundle isolation."""
+    return await _get_verified_document(db, transaction_id, document_id)
+
+
+@router.get(
     "/{document_id}/pages",
     response_model=List[DocumentPageResponseSchema],
 )
@@ -133,20 +188,13 @@ async def get_document_pages(
     db: AsyncSession = Depends(get_db),
 ):
     """Retrieve all parsed pages with layout coordinates and raw extracted text."""
+    await _get_verified_document(db, transaction_id, document_id)
     result = await db.execute(
         select(DocumentPage)
         .filter_by(document_id=document_id)
         .order_by(DocumentPage.page_number.asc())
     )
     pages = result.scalars().all()
-    if not pages:
-        doc_result = await db.execute(select(Document).filter_by(id=document_id))
-        doc = doc_result.scalar_one_or_none()
-        if not doc:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Document with ID '{document_id}' not found.",
-            )
 
     return [
         DocumentPageResponseSchema(
@@ -172,13 +220,7 @@ async def extract_document_clauses(
     """
     Triggers clause boundary detection and legal taxonomy classification on an ingested document.
     """
-    doc_result = await db.execute(select(Document).filter_by(id=document_id))
-    doc = doc_result.scalar_one_or_none()
-    if not doc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document with ID '{document_id}' not found.",
-        )
+    await _get_verified_document(db, transaction_id, document_id)
 
     clauses = await clause_intelligence_engine.process_document_clauses(
         session=db, bundle_id=transaction_id, document_id=document_id
@@ -219,6 +261,7 @@ async def get_document_clauses(
     db: AsyncSession = Depends(get_db),
 ):
     """Retrieve extracted clauses for a specific document."""
+    await _get_verified_document(db, transaction_id, document_id)
     result = await db.execute(
         select(Clause)
         .filter_by(document_id=document_id)
@@ -263,13 +306,7 @@ async def extract_document_metadata(
     Extracts structured real-estate parameters (carpet area, price, timelines, parties)
     from document pages and segmented clauses.
     """
-    doc_result = await db.execute(select(Document).filter_by(id=document_id))
-    doc = doc_result.scalar_one_or_none()
-    if not doc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document with ID '{document_id}' not found.",
-        )
+    await _get_verified_document(db, transaction_id, document_id)
 
     attrs = await metadata_engine.process_document_metadata(
         session=db, bundle_id=transaction_id, document_id=document_id
@@ -308,6 +345,7 @@ async def get_document_metadata(
     db: AsyncSession = Depends(get_db),
 ):
     """Retrieve extracted metadata attributes for a specific document."""
+    await _get_verified_document(db, transaction_id, document_id)
     res = await db.execute(
         select(ExtractedAttribute)
         .filter_by(document_id=document_id)
