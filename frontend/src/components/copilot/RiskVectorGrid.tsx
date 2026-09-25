@@ -40,9 +40,19 @@ export const RiskVectorGrid: React.FC<RiskVectorGridProps> = ({
   riskVectors,
   onSelectVector,
 }) => {
+  const vectors = riskVectors || [];
+
+  if (vectors.length === 0) {
+    return (
+      <div className="p-4 rounded-xl bg-[#111622]/80 border border-zinc-800 text-center text-xs text-zinc-400">
+        No high-risk vectors flagged. All verified parameters within standard statutory thresholds.
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">
-      {riskVectors.map((v) => {
+      {vectors.map((v) => {
         const colors = SEVERITY_COLORS[v.riskLevel] || SEVERITY_COLORS.MEDIUM;
         const icon = VECTOR_ICONS[v.id] || <AlertTriangle className="w-5 h-5 text-amber-400" />;
 

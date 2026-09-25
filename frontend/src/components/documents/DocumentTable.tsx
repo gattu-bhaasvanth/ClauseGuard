@@ -12,15 +12,17 @@ interface DocumentTableProps {
 }
 
 export function DocumentTable({
-  documents,
+  documents = [],
   transactionId = "skyview-a1204",
 }: DocumentTableProps) {
+  const docs = documents || [];
+
   return (
     <Card className="overflow-hidden">
       <div className="p-4 border-b border-surface-border flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-zinc-100">
-            Uploaded Transaction Documents ({documents.length})
+            Uploaded Transaction Documents ({docs.length})
           </h3>
           <p className="text-xs text-zinc-400">
             All files parsed together for cross-document consistency checks
@@ -28,35 +30,40 @@ export function DocumentTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-surface-subtle/50 text-zinc-400 uppercase tracking-wider text-[10px] border-b border-surface-border">
-            <tr>
-              <th className="py-3 px-4">Document File</th>
-              <th className="py-3 px-4">Document Type</th>
-              <th className="py-3 px-4">Pages / Size</th>
-              <th className="py-3 px-4">Clauses Parsed</th>
-              <th className="py-3 px-4">Status</th>
-              <th className="py-3 px-4 text-right">Viewer</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-surface-border/60 text-zinc-300">
-            {documents.map((doc) => (
-              <tr
-                key={doc.id}
-                className="hover:bg-surface-hover/60 transition-colors"
-              >
-                <td className="py-3 px-4">
-                  <div className="flex items-center gap-2.5">
-                    <FileText className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <span className="font-medium text-zinc-100 truncate max-w-xs">
-                      {doc.fileName}
-                    </span>
-                  </div>
-                </td>
-                <td className="py-3 px-4 text-zinc-400 font-mono text-[11px]">
-                  {doc.documentType.replace(/_/g, " ")}
-                </td>
+      {docs.length === 0 ? (
+        <div className="p-8 text-center text-xs text-zinc-400">
+          No documents uploaded yet for this transaction.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-surface-subtle/50 text-zinc-400 uppercase tracking-wider text-[10px] border-b border-surface-border">
+              <tr>
+                <th className="py-3 px-4">Document File</th>
+                <th className="py-3 px-4">Document Type</th>
+                <th className="py-3 px-4">Pages / Size</th>
+                <th className="py-3 px-4">Clauses Parsed</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4 text-right">Viewer</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-surface-border/60 text-zinc-300">
+              {docs.map((doc) => (
+                <tr
+                  key={doc.id}
+                  className="hover:bg-surface-hover/60 transition-colors"
+                >
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-2.5">
+                      <FileText className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                      <span className="font-medium text-zinc-100 truncate max-w-xs">
+                        {doc.fileName}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-zinc-400 font-mono text-[11px]">
+                    {(doc.documentType || "OTHER").replace(/_/g, " ")}
+                  </td>
                 <td className="py-3 px-4 text-zinc-400">
                   {doc.pageCount} pages • {doc.fileSize}
                 </td>
@@ -84,6 +91,7 @@ export function DocumentTable({
           </tbody>
         </table>
       </div>
+      )}
     </Card>
   );
 }

@@ -187,10 +187,10 @@ export default function TransactionOverviewPage({
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-            {transaction.title}
+            {transaction.title || `${transaction.property?.project || "Custom Transaction"} — ${transaction.property?.unit || "Unit"}`}
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
-            {transaction.property.location} • Promoter: {transaction.property.developer}
+            {transaction.property?.location || "Location not specified"} • Promoter: {transaction.property?.developer || "Promoter not specified"}
           </p>
         </div>
 
@@ -251,9 +251,13 @@ export default function TransactionOverviewPage({
             Documents Analyzed
           </span>
           <span className="text-2xl font-bold font-mono text-zinc-100 mt-1 block">
-            {transaction.documentsCount}
+            {transaction.documentsCount ?? transaction.documents?.length ?? 0}
           </span>
-          <span className="text-[11px] text-zinc-500">Agreements, Letters & Brochure</span>
+          <span className="text-[11px] text-zinc-500">
+            {(transaction.documentsCount ?? transaction.documents?.length ?? 0) === 1
+              ? "1 Document Uploaded"
+              : "Agreements, Letters & Brochure"}
+          </span>
         </Card>
 
         <Card className="p-4 border-l-4 border-l-rose-500">
@@ -264,7 +268,7 @@ export default function TransactionOverviewPage({
             {effectiveCommandCenterData.financialExposure?.totalFinancialAtRiskFormatted || "₹0"}
           </span>
           <span className="text-[11px] text-rose-400/80">
-            {effectiveCommandCenterData.financialExposure?.totalFinancialAtRisk > 0
+            {(effectiveCommandCenterData.financialExposure?.totalFinancialAtRisk || 0) > 0
               ? "Earnest Forfeit + Area Disparity"
               : "No Exposure Detected"}
           </span>
@@ -275,10 +279,10 @@ export default function TransactionOverviewPage({
             Risk & Discrepancies
           </span>
           <span className="text-2xl font-bold font-mono text-amber-400 mt-1 block">
-            {transaction.issuesCount}
+            {transaction.issuesCount ?? 0}
           </span>
           <span className="text-[11px] text-zinc-500">
-            {transaction.inconsistenciesCount || 0} Inconsistencies, {transaction.risksCount || 0} Risks
+            {(transaction.inconsistenciesCount ?? transaction.inconsistencies?.length) || 0} Inconsistencies, {(transaction.risksCount ?? transaction.risks?.length) || 0} Risks
           </span>
         </Card>
 
@@ -287,10 +291,12 @@ export default function TransactionOverviewPage({
             Reconciled Milestones
           </span>
           <span className="text-2xl font-bold font-mono text-zinc-100 mt-1 block">
-            {timelineData.totalEvents || 7}
+            {effectiveTimelineData.totalEvents ?? 0}
           </span>
           <span className="text-[11px] text-amber-400/90">
-            {timelineData.conflictingEventsCount || 3} Conflicting Promises
+            {(effectiveTimelineData.conflictingEventsCount || 0) > 0
+              ? `${effectiveTimelineData.conflictingEventsCount} Conflicting Promises`
+              : "No Conflicting Promises"}
           </span>
         </Card>
       </div>
@@ -308,7 +314,7 @@ export default function TransactionOverviewPage({
             },
             {
               id: "timeline",
-              label: `Timeline & Obligations (${timelineData.totalEvents || 7})`,
+              label: `Timeline & Obligations (${effectiveTimelineData.totalEvents ?? 0})`,
               icon: Calendar,
             },
             {
@@ -323,17 +329,17 @@ export default function TransactionOverviewPage({
             },
             {
               id: "inconsistencies",
-              label: `Potential Inconsistencies (${transaction.inconsistenciesCount})`,
+              label: `Potential Inconsistencies (${(transaction.inconsistenciesCount ?? transaction.inconsistencies?.length) || 0})`,
               icon: Split,
             },
             {
               id: "risks",
-              label: `Potential Risks (${transaction.risksCount})`,
+              label: `Potential Risks (${(transaction.risksCount ?? transaction.risks?.length) || 0})`,
               icon: AlertTriangle,
             },
             {
               id: "documents",
-              label: `Documents (${transaction.documentsCount})`,
+              label: `Documents (${(transaction.documentsCount ?? transaction.documents?.length) || 0})`,
               icon: FileText,
             },
           ].map((tab) => {
@@ -425,13 +431,22 @@ export default function TransactionOverviewPage({
             </div>
 
             <div className="space-y-4">
-              {transaction.inconsistencies.map((inc: any) => (
-                <InconsistencyCard
-                  key={inc.id}
-                  inconsistency={inc}
-                  transactionId={transaction.id}
-                />
-              ))}
+              {(!transaction.inconsistencies || transaction.inconsistencies.length === 0) ? (
+                <div className="p-8 rounded-xl bg-surface border border-surface-border text-center text-xs text-zinc-400 space-y-1">
+                  <p className="font-semibold text-zinc-300">No cross-document discrepancies detected</p>
+                  <p className="text-zinc-500">
+                    With a single uploaded document, cross-document comparison is not applicable. Upload additional files (such as marketing brochures or allotment letters) to enable cross-document discrepancy checking.
+                  </p>
+                </div>
+              ) : (
+                transaction.inconsistencies.map((inc: any) => (
+                  <InconsistencyCard
+                    key={inc.id}
+                    inconsistency={inc}
+                    transactionId={transaction.id}
+                  />
+                ))
+              )}
             </div>
           </div>
         )}
@@ -449,20 +464,29 @@ export default function TransactionOverviewPage({
             </div>
 
             <div className="space-y-4">
-              {transaction.risks.map((risk: any) => (
-                <div key={risk.id} className="relative">
-                  <RiskCard risk={risk} transactionId={transaction.id} />
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      onClick={() => setExplainFindingId(risk.id)}
-                      className="text-xs text-emerald-400 hover:text-emerald-300 font-medium inline-flex items-center gap-1 transition-colors"
-                    >
-                      <span>Why is this risky? (Explainable Analysis)</span>
-                      <span>→</span>
-                    </button>
-                  </div>
+              {(!transaction.risks || transaction.risks.length === 0) ? (
+                <div className="p-8 rounded-xl bg-surface border border-surface-border text-center text-xs text-zinc-400 space-y-1">
+                  <p className="font-semibold text-zinc-300">No high-priority contractual risks detected</p>
+                  <p className="text-zinc-500">
+                    No aggressive builder forfeiture or delay compensation asymmetry clauses were flagged for this transaction.
+                  </p>
                 </div>
-              ))}
+              ) : (
+                transaction.risks.map((risk: any) => (
+                  <div key={risk.id} className="relative">
+                    <RiskCard risk={risk} transactionId={transaction.id} />
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        onClick={() => setExplainFindingId(risk.id)}
+                        className="text-xs text-emerald-400 hover:text-emerald-300 font-medium inline-flex items-center gap-1 transition-colors"
+                      >
+                        <span>Why is this risky? (Explainable Analysis)</span>
+                        <span>→</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}
@@ -470,7 +494,7 @@ export default function TransactionOverviewPage({
         {/* Tab 7: Documents Table (Phase 3 Preserved) */}
         {activeTab === "documents" && (
           <DocumentTable
-            documents={transaction.documents}
+            documents={transaction.documents || []}
             transactionId={transaction.id}
           />
         )}

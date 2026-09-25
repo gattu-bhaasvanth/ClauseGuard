@@ -13,6 +13,8 @@ export const FinancialExposureCard: React.FC<FinancialExposureCardProps> = ({
   financial,
   onExploreExposure,
 }) => {
+  const fin = financial || ({} as any);
+
   return (
     <div className="rounded-xl bg-[#111622]/90 border border-zinc-800/90 p-5 shadow-lg relative overflow-hidden">
       {/* Background subtle radial glow */}
@@ -36,7 +38,7 @@ export const FinancialExposureCard: React.FC<FinancialExposureCardProps> = ({
             Total Capital At Risk:
           </span>
           <span className="text-xl font-bold font-mono text-rose-300">
-            {financial.totalFinancialAtRiskFormatted}
+            {fin.totalFinancialAtRiskFormatted || "₹0"}
           </span>
         </div>
       </div>
@@ -46,7 +48,7 @@ export const FinancialExposureCard: React.FC<FinancialExposureCardProps> = ({
         <div className="p-3.5 rounded-lg bg-zinc-900/60 border border-zinc-800/70">
           <span className="text-xs text-zinc-400 block mb-1">Base Consideration</span>
           <span className="text-lg font-bold font-mono text-zinc-100 block">
-            {financial.baseConsiderationFormatted}
+            {fin.baseConsiderationFormatted || "₹0"}
           </span>
           <div className="mt-2 flex items-center gap-1.5 text-[11px] text-zinc-400">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -58,10 +60,10 @@ export const FinancialExposureCard: React.FC<FinancialExposureCardProps> = ({
         <div className="p-3.5 rounded-lg bg-rose-950/20 border border-rose-900/30">
           <span className="text-xs text-rose-300 block mb-1">Earnest Forfeiture (20%)</span>
           <span className="text-lg font-bold font-mono text-rose-300 block">
-            {financial.earnestMoneyForfeitRiskFormatted}
+            {fin.earnestMoneyForfeitRiskFormatted || "₹0"}
           </span>
           <div className="mt-2 text-[11px] text-rose-400/90 font-mono">
-            +{financial.excessForfeitExposureFormatted} excess vs 10% RERA limit
+            +{fin.excessForfeitExposureFormatted || "₹0"} excess vs 10% RERA limit
           </div>
         </div>
 
@@ -69,13 +71,13 @@ export const FinancialExposureCard: React.FC<FinancialExposureCardProps> = ({
         <div className="p-3.5 rounded-lg bg-amber-950/20 border border-amber-900/30">
           <span className="text-xs text-amber-300 block mb-1">Penalty Imbalance</span>
           <div className="flex items-baseline gap-1.5 text-base font-bold font-mono text-amber-200">
-            <span>{financial.delayInterestRateBuyer}%</span>
+            <span>{fin.delayInterestRateBuyer ?? 0}%</span>
             <span className="text-xs font-normal text-zinc-400">buyer vs</span>
-            <span>{financial.delayCompensationRateDeveloper}%</span>
+            <span>{fin.delayCompensationRateDeveloper ?? 0}%</span>
             <span className="text-xs font-normal text-zinc-400">dev</span>
           </div>
           <div className="mt-2 text-[11px] text-amber-400/90 font-mono">
-            {financial.monthlyAsymmetryCostFormatted} asymmetry
+            {fin.monthlyAsymmetryCostFormatted || "₹0 / mo"} asymmetry
           </div>
         </div>
 
@@ -83,10 +85,10 @@ export const FinancialExposureCard: React.FC<FinancialExposureCardProps> = ({
         <div className="p-3.5 rounded-lg bg-zinc-900/60 border border-zinc-800/70">
           <span className="text-xs text-zinc-400 block mb-1">Carpet Area Shortfall Cost</span>
           <span className="text-lg font-bold font-mono text-zinc-100 block">
-            {financial.areaDiscrepancyCostImpactFormatted}
+            {fin.areaDiscrepancyCostImpactFormatted || "₹0"}
           </span>
           <div className="mt-2 text-[11px] text-zinc-400">
-            70 sq.ft (-4.8%) @ effective rate
+            {(fin.areaDiscrepancyCostImpact || 0) > 0 ? "Shortfall deficit detected" : "No area disparity detected"}
           </div>
         </div>
       </div>

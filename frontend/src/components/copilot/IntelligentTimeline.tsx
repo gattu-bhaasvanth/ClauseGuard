@@ -17,7 +17,13 @@ export const IntelligentTimeline: React.FC<IntelligentTimelineProps> = ({
 }) => {
   const [filter, setFilter] = useState<"ALL" | "CONTRACTUAL" | "CONFLICTS" | "UNCERTAIN">("ALL");
 
-  const filteredEvents = timelineData.events.filter((ev) => {
+  const events = timelineData?.events || [];
+  const totalEvents = timelineData?.totalEvents ?? events.length;
+  const contractualCount = timelineData?.contractualEventsCount ?? events.filter((e) => e.dateType === "CONTRACTUAL").length;
+  const conflictingCount = timelineData?.conflictingEventsCount ?? events.filter((e) => Boolean(e.conflictingDate)).length;
+  const uncertainCount = timelineData?.uncertainEventsCount ?? events.filter((e) => e.dateType === "UNCERTAIN").length;
+
+  const filteredEvents = events.filter((ev) => {
     if (filter === "CONTRACTUAL") return ev.dateType === "CONTRACTUAL";
     if (filter === "CONFLICTS") return Boolean(ev.conflictingDate);
     if (filter === "UNCERTAIN") return ev.dateType === "UNCERTAIN";
@@ -50,7 +56,7 @@ export const IntelligentTimeline: React.FC<IntelligentTimelineProps> = ({
                 : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
             }`}
           >
-            All ({timelineData.totalEvents})
+            All ({totalEvents})
           </button>
           <button
             onClick={() => setFilter("CONTRACTUAL")}
@@ -60,7 +66,7 @@ export const IntelligentTimeline: React.FC<IntelligentTimelineProps> = ({
                 : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
             }`}
           >
-            Contractual ({timelineData.contractualEventsCount})
+            Contractual ({contractualCount})
           </button>
           <button
             onClick={() => setFilter("CONFLICTS")}
@@ -70,7 +76,7 @@ export const IntelligentTimeline: React.FC<IntelligentTimelineProps> = ({
                 : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
             }`}
           >
-            Conflicts ({timelineData.conflictingEventsCount})
+            Conflicts ({conflictingCount})
           </button>
           <button
             onClick={() => setFilter("UNCERTAIN")}
@@ -80,14 +86,14 @@ export const IntelligentTimeline: React.FC<IntelligentTimelineProps> = ({
                 : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
             }`}
           >
-            Milestone Calls ({timelineData.uncertainEventsCount})
+            Milestone Calls ({uncertainCount})
           </button>
         </div>
       </div>
 
       {/* Conflict Alert Banner */}
       <TimelineConflictAlert
-        conflictingEventsCount={timelineData.conflictingEventsCount}
+        conflictingEventsCount={conflictingCount}
         onExploreConflicts={() => setFilter("CONFLICTS")}
       />
 

@@ -27,6 +27,8 @@ export const PriorityActionList: React.FC<PriorityActionListProps> = ({
   actions,
   onSelectAction,
 }) => {
+  const actionItems = actions || [];
+
   return (
     <div className="rounded-xl bg-[#111622]/90 border border-zinc-800/90 p-5 shadow-lg">
       <div className="flex items-center justify-between pb-4 border-b border-zinc-800/80 mb-4">
@@ -39,12 +41,17 @@ export const PriorityActionList: React.FC<PriorityActionListProps> = ({
           </p>
         </div>
         <span className="text-xs font-mono font-medium text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
-          {actions.length} Action Items
+          {actionItems.length} Action Items
         </span>
       </div>
 
       <div className="space-y-3">
-        {actions.map((act, index) => {
+        {actionItems.length === 0 ? (
+          <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 text-center text-xs text-zinc-400">
+            No priority action items required at this stage. All uploaded documents verified.
+          </div>
+        ) : (
+          actionItems.map((act, index) => {
           const cat = CATEGORY_LABELS[act.category] || { label: act.category, style: "bg-zinc-800 text-zinc-300 border-zinc-700" };
           const sev = SEVERITY_BADGES[act.severity] || SEVERITY_BADGES.MEDIUM;
 
@@ -108,7 +115,7 @@ export const PriorityActionList: React.FC<PriorityActionListProps> = ({
               </div>
             </div>
           );
-        })}
+        }))}
       </div>
     </div>
   );
