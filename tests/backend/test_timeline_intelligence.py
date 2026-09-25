@@ -22,10 +22,13 @@ async def test_timeline_reconciliation(db_session: AsyncSession):
     assert "MARKETING" in date_types
     assert "UNCERTAIN" in date_types
 
-    # Verify conflict flags
+    # Verify conflict flags: genuine conflict between Allotment (2027-06-30) and BBA (2027-12-31)
     conflicted = [e for e in res.events if e.conflictingDate is not None]
     assert len(conflicted) >= 2
-    assert any("2026-12-31" in (e.eventDate or "") for e in conflicted)
+    assert any("2027-06-30" in (e.eventDate or "") for e in conflicted)
+    assert any("2027-12-31" in (e.eventDate or "") for e in conflicted)
+    # Ensure false 2026-12-31 is completely eliminated
+    assert not any("2026-12-31" in (e.eventDate or "") for e in res.events)
 
     # Verify milestone payment linkage
     obligations = [e for e in res.events if e.linkedObligationAmount is not None]

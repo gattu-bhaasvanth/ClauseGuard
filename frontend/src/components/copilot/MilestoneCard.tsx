@@ -66,6 +66,16 @@ export const MilestoneCard: React.FC<MilestoneCardProps> = ({
               <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">
                 {event.status}
               </span>
+              {event.isDerived && (
+                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                  Derived
+                </span>
+              )}
+              {event.precision === "YEAR" && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                  Year-Only
+                </span>
+              )}
               {event.clauseReference && (
                 <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded">
                   {event.clauseReference}
@@ -105,7 +115,7 @@ export const MilestoneCard: React.FC<MilestoneCardProps> = ({
           <div>
             <span className="font-semibold text-amber-200">Date Conflict: </span>
             <span>
-              Contradicts contractual deadline ({event.conflictingDate}). {event.conflictDetails}
+              {event.conflictDetails || `Contradicts milestone date (${event.conflictingDate}) in transaction documents.`}
             </span>
           </div>
         </div>

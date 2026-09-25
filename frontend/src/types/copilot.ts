@@ -144,6 +144,10 @@ export interface TimelineEvent {
   linkedObligationFormatted?: string;
   conflictingDate?: string;
   conflictDetails?: string;
+  precision?: "DAY" | "MONTH" | "YEAR" | "UNCERTAIN" | string;
+  rawEvidence?: string;
+  isDerived?: boolean;
+  sourceDocument?: string;
 }
 
 export interface TimelineData {
@@ -155,6 +159,7 @@ export interface TimelineData {
   marketingEventsCount: number;
   inferredEventsCount: number;
   uncertainEventsCount: number;
+  conflictSummary?: string;
 }
 
 export interface BriefSection {

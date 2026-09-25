@@ -47,8 +47,10 @@ async def test_copilot_date_conflicts_intent(db_session: AsyncSession):
     assert res.grounded is True
     assert res.refused is False
     assert res.intent == "DATE_CONFLICTS"
-    assert "2026" in res.answer
+    assert "2026" not in res.answer
     assert "2027" in res.answer
+    assert "30 June 2027" in res.answer
+    assert "31 December 2027" in res.answer
     assert len(res.citations) >= 2
 
 
