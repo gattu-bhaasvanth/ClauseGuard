@@ -50,17 +50,20 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Project Phases */}
+          {/* Architecture & Intelligence */}
           <div className="space-y-2 text-xs">
             <span className="font-semibold text-zinc-200 block uppercase tracking-wider text-[10px]">
-              Architecture Roadmap
+              Architecture & Intelligence
             </span>
-            <ul className="space-y-1.5 text-zinc-500">
-              <li className="text-emerald-400/90 font-medium">Phase 1: Frontend Foundation</li>
-              <li>Phase 2: FastAPI & DB Core</li>
-              <li>Phase 3: PDF & PaddleOCR</li>
-              <li>Phase 6: Cross-Doc Engine</li>
-              <li>Phase 9: Real ML Training</li>
+            <ul className="space-y-1.5 text-zinc-400">
+              <li className="text-emerald-400/90 font-medium">Document Ingestion & OCR</li>
+              <li>Clause & Entity Intelligence</li>
+              <li>Cross-Document Verification</li>
+              <li>Risk & Audit Analysis</li>
+              <li>Grounded RAG & Evidence</li>
+              <li>Domain-Specific ML</li>
+              <li>Transaction Intelligence Copilot</li>
+              <li>Timeline, Lineage & Executive Brief</li>
             </ul>
           </div>
         </div>
@@ -70,7 +73,7 @@ export function Footer() {
 
         <div className="mt-8 pt-4 border-t border-surface-border/50 flex flex-col sm:flex-row items-center justify-between text-[11px] text-zinc-500">
           <span>&copy; {new Date().getFullYear()} ClauseGuard. Built for transparent property transactions.</span>
-          <span className="mt-2 sm:mt-0 font-mono">v0.1.0-alpha • Phase 1 UI</span>
+          <span className="mt-2 sm:mt-0 font-mono">v1.0.0 • Transaction Intelligence</span>
         </div>
       </div>
     </footer>

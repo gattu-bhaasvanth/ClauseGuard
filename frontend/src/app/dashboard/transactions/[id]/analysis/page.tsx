@@ -39,7 +39,15 @@ export default function DocumentAnalysisPage({
     } else {
       fetchTransactionById(transactionId)
         .then((res) => {
-          if (res) setTransaction(res);
+          if (res) {
+            setTransaction(res);
+            if (typeof window !== "undefined") {
+              const proj = res.property?.project || res.property?.projectName || "";
+              const unt = res.property?.unit || res.property?.unitNumber || "";
+              const title = proj && unt ? `${proj} — ${unt}` : (res.title || "Custom Transaction");
+              window.dispatchEvent(new CustomEvent("cg-tx-loaded", { detail: { id: res.id, title } }));
+            }
+          }
         })
         .catch(() => {});
     }
