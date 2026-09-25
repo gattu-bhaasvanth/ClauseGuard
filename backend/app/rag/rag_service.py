@@ -161,17 +161,28 @@ class TransactionRAGService:
         for doc in documents:
             fname = (doc.file_name or "").lower()
             dtype = (doc.document_type or "").lower()
-            stem = fname.rsplit(".", 1)[0]
+            stem = fname.rsplit(".", 1)[0].replace("_", " ").replace("-", " ")
+            stripped_stem = re.sub(r"^\d+\s*", "", stem).strip()
 
             is_match = False
-            # Check exact stem / filename mention
-            if stem and stem in q:
+            # Check exact stem or stripped filename mention
+            if (stem and stem in q) or (stripped_stem and len(stripped_stem) >= 4 and stripped_stem in q):
+                is_match = True
+            elif any(
+                phrase in fname.replace("_", " ") or phrase in dtype
+                for phrase in [
+                    "allotment", "builder buyer", "bba", "sale agreement", "agreement for sale",
+                    "brochure", "marketing", "payment schedule", "payment plan", "villa agreement",
+                    "conveyance", "lease agreement", "sanction"
+                ]
+                if phrase in q
+            ):
                 is_match = True
             elif "allotment" in q and ("allotment" in fname or "allotment" in dtype):
                 is_match = True
             elif ("bba" in q or "builder buyer" in q or "builder-buyer" in q) and ("bba" in fname or "builder" in fname or "buyer" in fname or "bba" in dtype):
                 is_match = True
-            elif ("sale agreement" in q or "agreement for sale" in q) and ("sale_agreement" in fname or "sale agreement" in fname or "sale" in dtype):
+            elif ("sale agreement" in q or "agreement for sale" in q or "agreement" in q and "agreement" in fname) and ("sale_agreement" in fname or "sale agreement" in fname or "sale" in dtype or "agreement" in fname):
                 is_match = True
             elif ("brochure" in q or "marketing" in q) and ("brochure" in fname or "marketing" in fname or "brochure" in dtype or "marketing" in dtype):
                 is_match = True
@@ -336,25 +347,52 @@ class TransactionRAGService:
             bundleId=bundle_id,
         )
 
+    GENERIC_CONTAINER_TERMS = {
+        "what", "is", "the", "are", "in", "of", "for", "to", "and", "a", "an", "on", "by", "at",
+        "which", "with", "this", "that", "from", "as", "it", "any", "all", "or", "how", "much",
+        "apartment", "flat", "unit", "villa", "property", "project", "building", "complex",
+        "agreement", "document", "contract", "clause", "schedule", "letter", "brochure",
+        "tell", "me", "about", "state", "mention", "give", "show", "details", "there"
+    }
+
     def _verify_grounding(self, query: str, ranked: List[RankedChunkResult]) -> bool:
         """
         Anti-hallucination guardrail:
         Strictly verify whether the retrieved chunks actually ground the query topic.
-        If top match has low cosine similarity and zero or negligible lexical overlap, reject.
+        If top match has low cosine similarity and zero substantive lexical overlap on topic terms, reject.
         """
+        if not ranked:
+            return False
+
         top = ranked[0]
 
-        # 1. Lexical keywords present + reasonable dense support
-        if top.lexical_score > 0 and top.dense_score >= 0.25:
+        # 1. High semantic similarity always passes (strong paraphrases)
+        if top.dense_score >= 0.50:
             return True
 
-        # 2. Strong semantic similarity (paraphrased queries without exact keyword overlap)
-        if top.dense_score >= 0.45:
-            return True
+        # 2. Extract substantive query topic terms (excluding generic containers and stopwords)
+        q_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", query.lower()))
+        topic_words = {w for w in q_words if w not in self.GENERIC_CONTAINER_TERMS}
 
-        # 3. Direct legal identifier match (e.g. "Clause 8.2")
-        if top.lexical_score >= 2.0:
-            return True
+        # Check if any substantive topic word is in the retrieved top chunks (using word boundaries)
+        combined_text = " ".join([r.chunk.chunk_text.lower() for r in ranked[:3]])
+        has_substantive_overlap = (
+            any(re.search(r"\b" + re.escape(tw) + r"\b", combined_text) for tw in topic_words)
+            if topic_words
+            else False
+        )
+
+        if has_substantive_overlap:
+            # Topic word present + reasonable dense/lexical signal
+            if top.dense_score >= 0.20 or top.lexical_score >= 0.8:
+                return True
+
+        # 3. Direct clause reference match (e.g., "Clause 8.2" or "Clause 3")
+        clause_match = re.search(r"clause\s*(\d+(?:\.\d+)?)", query, re.IGNORECASE)
+        if clause_match:
+            cl_num = clause_match.group(1)
+            if any(cl_num in (r.chunk.clause_number or "") for r in ranked[:3]):
+                return True
 
         return False
 

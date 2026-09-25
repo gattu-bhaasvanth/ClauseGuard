@@ -1,7 +1,9 @@
 import pytest
 import re
+import fitz
 from datetime import datetime
 from typing import List
+from httpx import AsyncClient
 
 from app.models.document import Document
 from app.models.attribute import ExtractedAttribute
@@ -473,4 +475,142 @@ def test_five_synthetic_pdfs_regression():
 
     unit_findings = UnitDiscrepancyEvaluator().evaluate("tx-regression", all_docs, all_attrs)
     assert len(unit_findings) == 0, f"False unit number discrepancy detected: {unit_findings}"
+
+
+# ==============================================================================
+# 6. UNSEEN NOVEL REAL-ESTATE TRANSACTION FULL LIFECYCLE E2E TEST
+# ==============================================================================
+
+@pytest.mark.asyncio
+async def test_completely_unseen_document_e2e_workflow(client: AsyncClient):
+    """
+    Generalization test: Verifies that an unseen real-estate project with novel wording,
+    new developer, novel unit format, and previously unseen filenames executes the
+    full intelligence pipeline correctly:
+    - Ingests unseen documents
+    - Extracts numbered clauses
+    - Detects genuine area discrepancy (2,150 vs 2,250 sq.ft.)
+    - Refuses false pricing discrepancies
+    - Respects document-scoped RAG queries
+    - Strictly triggers anti-hallucination refusal for ungrounded queries
+    - Dynamically synthesizes timeline with marketing (approximate) and contractual milestones
+    """
+    # 1. Build 2 novel PDFs in memory using fitz
+    pdf1 = fitz.open()
+    page1 = pdf1.new_page()
+    text1 = '''SERENE MEADOWS LUXURY VILLAS
+AGREEMENT FOR SALE AND ALLOTMENT
+
+1. Property & Allotted Area
+The Developer hereby allots Villa 14 having unit area
+admeasuring 2,150 sq.ft. of carpet area in Sector 5.
+
+2. Total Consideration
+The total agreed consideration for the property is
+Rupees One Crore Twenty Lakh only (INR 1,20,00,000/-).
+
+3. Delivery of Possession
+The Developer covenants to complete construction and
+effect delivery of the unit by 30th September 2028.
+
+4. Promoter Grace Period
+The Promoter shall be entitled to an unconditional grace period
+of 90 days from the scheduled date of delivery.
+'''
+    page1.insert_textbox(fitz.Rect(50, 50, 550, 750), text1, fontsize=11)
+    bytes1 = pdf1.write()
+    pdf1.close()
+
+    pdf2 = fitz.open()
+    page2 = pdf2.new_page()
+    text2 = '''SERENE MEADOWS LUXURY RESIDENCES
+OFFICIAL PROJECT BROCHURE
+
+Exquisite private villas offering a luxurious carpet area of 2,250 sq.ft.
+Target handover in 2028.
+Ultra-luxury clubhouse with temperature-controlled swimming pools.
+'''
+    page2.insert_textbox(fitz.Rect(50, 50, 550, 750), text2, fontsize=11)
+    bytes2 = pdf2.write()
+    pdf2.close()
+
+    # 2. Create novel transaction
+    tx_res = await client.post('/api/v1/transactions', json={
+        'projectName': 'Serene Meadows',
+        'unit': 'Villa 14',
+        'developer': 'Meadowlands Realty LLP',
+        'city': 'Bengaluru, Karnataka',
+        'approxPrice': 12000000.0,
+        'carpetAreaSqFt': 2150.0,
+        'superAreaSqFt': 2800.0
+    })
+    assert tx_res.status_code == 201
+    tx_id = tx_res.json()['id']
+
+    # 3. Upload both novel PDFs
+    u1 = await client.post(
+        f'/api/v1/transactions/{tx_id}/documents/upload',
+        files={'file': ('Novel_Villa_Agreement.pdf', bytes1, 'application/pdf')},
+        data={'document_type': 'agreement_sale', 'auto_extract_clauses': 'true'}
+    )
+    assert u1.status_code == 201
+
+    u2 = await client.post(
+        f'/api/v1/transactions/{tx_id}/documents/upload',
+        files={'file': ('Novel_Brochure.pdf', bytes2, 'application/pdf')},
+        data={'document_type': 'sales_brochure', 'auto_extract_clauses': 'true'}
+    )
+    assert u2.status_code == 201
+
+    # 4. Analyze cross-document inconsistencies
+    ana_res = await client.post(f'/api/v1/transactions/{tx_id}/analyze')
+    assert ana_res.status_code == 200
+    inconsistencies = ana_res.json().get('inconsistencies', [])
+
+    area_inc = next((i for i in inconsistencies if i.get('category') == 'AREA'), None)
+    assert area_inc is not None, 'Area discrepancy must be detected between 2150 and 2250 sq.ft'
+    assert '2,150' in area_inc.get('description') or '2150' in area_inc.get('description')
+    assert '2,250' in area_inc.get('description') or '2250' in area_inc.get('description')
+
+    price_inc = next((i for i in inconsistencies if i.get('category') == 'PRICING'), None)
+    assert price_inc is None, 'Matching consideration should trigger no false discrepancy'
+
+    # 5. Index RAG
+    idx_res = await client.post(f'/api/v1/transactions/{tx_id}/rag/index-all')
+    assert idx_res.status_code == 200
+
+    # 6. Scoped RAG query 1 (Villa Agreement)
+    rag1 = await client.post(f'/api/v1/transactions/{tx_id}/rag/query', json={
+        'query': 'What is the delivery date in the Villa Agreement?'
+    })
+    assert rag1.status_code == 200
+    d1 = rag1.json()
+    assert any('Agreement' in c.get('documentName', '') for c in d1.get('citations', []))
+    assert '2028-09-30' in d1.get('answer') or 'September' in d1.get('answer')
+
+    # Scoped RAG query 2 (Brochure)
+    rag2 = await client.post(f'/api/v1/transactions/{tx_id}/rag/query', json={
+        'query': 'What is the carpet area in the brochure?'
+    })
+    assert rag2.status_code == 200
+    d2 = rag2.json()
+    assert any('Brochure' in c.get('documentName', '') for c in d2.get('citations', []))
+    assert '2,250' in d2.get('answer') or '2250' in d2.get('answer')
+
+    # Anti-hallucination refusal query
+    rag3 = await client.post(f'/api/v1/transactions/{tx_id}/rag/query', json={
+        'query': 'What is the pet policy for dogs in the villa complex?'
+    })
+    assert rag3.status_code == 200
+    d3 = rag3.json()
+    assert d3.get('grounded') is False
+    assert 'no verified mention' in d3.get('answer').lower() or 'insufficient' in d3.get('answer').lower()
+
+    # 7. Timeline derivation
+    t_res = await client.get(f'/api/v1/transactions/{tx_id}/copilot/timeline')
+    assert t_res.status_code == 200
+    events = t_res.json().get('events', [])
+    assert any(ev.get('eventDate') == '2028-09-30' and ev.get('dateType') == 'CONTRACTUAL' for ev in events)
+    assert any(ev.get('eventDate') == '2028' and ev.get('dateType') == 'MARKETING' for ev in events)
+
 
