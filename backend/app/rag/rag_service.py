@@ -383,8 +383,10 @@ class TransactionRAGService:
         )
 
         if has_substantive_overlap:
-            # Topic word present + reasonable dense/lexical signal
-            if top.dense_score >= 0.20 or top.lexical_score >= 0.8:
+            # Substantive topic word present + solid dense semantic corroboration
+            if top.dense_score >= 0.33 and top.lexical_score >= 0.8:
+                return True
+            if top.dense_score >= 0.42:
                 return True
 
         # 3. Direct clause reference match (e.g., "Clause 8.2" or "Clause 3")
