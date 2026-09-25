@@ -41,7 +41,9 @@ async def check_readiness(db: AsyncSession = Depends(get_db)):
     except Exception:
         db_ready = False
 
-    storage_ready = Path(settings.STORAGE_LOCAL_DIR).exists()
+    from app.ingestion.storage import storage_manager
+
+    storage_ready = storage_manager.upload_dir.exists() or Path(settings.STORAGE_LOCAL_DIR).exists()
     ml_ready = local_intelligence_engine.is_loaded
 
     is_ready = db_ready and storage_ready
