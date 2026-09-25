@@ -107,6 +107,10 @@ class TimelineEventSchema(BaseModel):
     linkedObligationFormatted: Optional[str] = None
     conflictingDate: Optional[str] = None
     conflictDetails: Optional[str] = None
+    precision: Optional[str] = None  # "DAY", "MONTH", "YEAR", "UNCERTAIN"
+    rawEvidence: Optional[str] = None
+    isDerived: bool = False
+    sourceDocument: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -120,6 +124,7 @@ class TimelineResponseSchema(BaseModel):
     marketingEventsCount: int
     inferredEventsCount: int
     uncertainEventsCount: int
+    conflictSummary: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 

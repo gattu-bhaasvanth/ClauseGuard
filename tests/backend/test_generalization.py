@@ -331,7 +331,7 @@ def test_dynamic_timeline_generation():
         ExtractedAttribute(id="a3", bundle_id="b-dyn", document_id="d-broch", attribute_key="possession_date", attribute_value="2027", normalized_value="2027", unit="date:YEAR", source_page=1),
     ]
 
-    events = timeline_service._build_dynamic_timeline_events(bundle, 7_500_000.0)
+    events, conflict_summary = timeline_service._build_dynamic_timeline_events(bundle, 7_500_000.0)
 
     # Must contain both possession dates
     dates = [e.eventDate for e in events]
@@ -339,17 +339,32 @@ def test_dynamic_timeline_generation():
     assert "2027-12-31" in dates, "BBA contractual possession date missing in timeline"
     assert "2027" in dates, "Brochure year milestone missing in timeline"
 
-    # Conflicting dates must be marked
+    # Conflicting dates must be marked between Allotment and BBA
     allot_event = next(e for e in events if e.eventDate == "2027-06-30")
     bba_event = next(e for e in events if e.eventDate == "2027-12-31")
-    assert allot_event.conflictingDate is not None, "Conflicting date not flagged on Allotment event"
-    assert bba_event.conflictingDate is not None, "Conflicting date not flagged on BBA event"
+    assert allot_event.conflictingDate == "2027-12-31", "Allotment should conflict with BBA 2027-12-31"
+    assert bba_event.conflictingDate == "2027-06-30", "BBA should conflict with Allotment 2027-06-30"
+
+    # Brochure has precision YEAR (2027), which is COMPATIBLE with 2027-06-30 and 2027-12-31
+    broch_event = next(e for e in events if e.eventDate == "2027")
+    assert broch_event.conflictingDate is None, "Year 2027 should NOT be flagged as conflicting with same-year 2027 exact dates"
+    assert broch_event.precision == "YEAR"
+    assert broch_event.isDerived is False
+    assert broch_event.documentName == "Brochure.pdf"
+
+    # Conflict summary must describe the genuine conflict between Allotment and Agreement, without inventing 2026
+    assert conflict_summary is not None
+    assert "Allotment.pdf" in conflict_summary
+    assert "Agreement.pdf" in conflict_summary
+    assert "2026" not in conflict_summary
 
     # Grace period event (2027-12-31 + 6 months = 2028-06-30)
     grace_event = next((e for e in events if "Grace Period" in e.title), None)
     assert grace_event is not None
     assert grace_event.eventDate == "2028-06-30"
     assert grace_event.dateType == "INFERRED"
+    assert grace_event.isDerived is True
+    assert grace_event.sourceDocument == "Agreement.pdf"
 
     # Uncertain final milestone
     uncertain_event = next((e for e in events if e.dateType == "UNCERTAIN"), None)
@@ -609,8 +624,92 @@ Ultra-luxury clubhouse with temperature-controlled swimming pools.
     # 7. Timeline derivation
     t_res = await client.get(f'/api/v1/transactions/{tx_id}/copilot/timeline')
     assert t_res.status_code == 200
-    events = t_res.json().get('events', [])
+    t_data = t_res.json()
+    events = t_data.get('events', [])
     assert any(ev.get('eventDate') == '2028-09-30' and ev.get('dateType') == 'CONTRACTUAL' for ev in events)
     assert any(ev.get('eventDate') == '2028' and ev.get('dateType') == 'MARKETING' for ev in events)
+    # Compatible 2028 year with 2028-09-30 must produce 0 false conflicts
+    assert t_data.get('conflictingEventsCount') == 0
+    assert t_data.get('conflictSummary') is None
+
+
+# ==============================================================================
+# 8. GENERALIZED TIMELINE PRECISION, PROVENANCE & CONFLICT SUITE
+# ==============================================================================
+
+def test_generalized_timeline_precision_provenance_and_conflicts():
+    """
+    Exhaustive test for generalized timeline reconciliation:
+    1. Year-only dates (e.g. 2029) remain YEAR precision and NEVER invent exact days.
+    2. Month/Year dates (e.g. 2029-03) remain MONTH precision.
+    3. Exact dates (e.g. 2029-03-31 vs 2029-09-30) detect genuine conflicts with provenance.
+    4. Year-only dates within the same year do NOT conflict with exact dates.
+    5. Different-year marketing dates (e.g. 2028 vs 2029) DO trigger conflicts.
+    6. Derived grace periods are only derived from exact contractual dates and carry isDerived=True.
+    7. Year-only contractual dates never invent an exact derived grace period day.
+    """
+    ts = TimelineService()
+
+    doc_broch = Document(id="d-orchard-broch", bundle_id="b-orchard", file_name="Prospectus_The_Orchard.pdf", document_type="BROCHURE")
+    doc_allot = Document(id="d-orchard-allot", bundle_id="b-orchard", file_name="Confirmation_Slip_Unit_7A.pdf", document_type="ALLOTMENT_LETTER")
+    doc_sale = Document(id="d-orchard-sale", bundle_id="b-orchard", file_name="Bilateral_Sale_Agreement.pdf", document_type="BUILDER_BUYER_AGREEMENT")
+
+    # Scenario A: Competing exact dates (March 2029 vs September 2029) + Year-only brochure (2029)
+    bundle_a = TransactionBundle(
+        id="b-orchard",
+        title="The Orchard Acquisition",
+        sale_price=12_000_000.0,
+        possession_date="2029-09-30",
+        grace_period_months=6,
+    )
+    bundle_a.documents = [doc_broch, doc_allot, doc_sale]
+    bundle_a.extracted_attributes = [
+        ExtractedAttribute(id="at-1", bundle_id="b-orchard", document_id="d-orchard-broch", attribute_key="possession_date", attribute_value="target 2029 handover", normalized_value="2029", unit="date:YEAR", source_page=2),
+        ExtractedAttribute(id="at-2", bundle_id="b-orchard", document_id="d-orchard-allot", attribute_key="possession_date", attribute_value="31 March 2029", normalized_value="2029-03-31", unit="date:DAY", source_page=1),
+        ExtractedAttribute(id="at-3", bundle_id="b-orchard", document_id="d-orchard-sale", attribute_key="possession_date", attribute_value="30 September 2029", normalized_value="2029-09-30", unit="date:DAY", source_page=8),
+    ]
+
+    events_a, summary_a = ts._build_dynamic_timeline_events(bundle_a, 12_000_000.0)
+
+    # 1. Brochure precision & absence of false conflict
+    ev_broch = next(e for e in events_a if e.documentName == "Prospectus_The_Orchard.pdf")
+    assert ev_broch.eventDate == "2029"
+    assert ev_broch.precision == "YEAR"
+    assert ev_broch.conflictingDate is None, "Year 2029 is compatible with 2029 dates and must not conflict"
+    assert ev_broch.isDerived is False
+    assert "exact day not specified" in ev_broch.description
+
+    # 2. Allotment vs Sale Agreement genuine conflict
+    ev_allot = next(e for e in events_a if e.documentName == "Confirmation_Slip_Unit_7A.pdf")
+    ev_sale = next(e for e in events_a if e.documentName == "Bilateral_Sale_Agreement.pdf")
+    assert ev_allot.conflictingDate == "2029-09-30"
+    assert "6-month delivery disparity" in ev_allot.conflictDetails
+    assert ev_sale.conflictingDate == "2029-03-31"
+    assert "6-month delivery disparity" in ev_sale.conflictDetails
+
+    # 3. Dynamic conflict summary
+    assert summary_a is not None
+    assert "Confirmation_Slip_Unit_7A.pdf specifies 31 March 2029" in summary_a
+    assert "Bilateral_Sale_Agreement.pdf stipulates 30 September 2029" in summary_a
+    assert "2026" not in summary_a
+
+    # 4. Grace period derived event
+    ev_grace = next((e for e in events_a if "Grace Period" in e.title), None)
+    assert ev_grace is not None
+    assert ev_grace.eventDate == "2030-03-30"
+    assert ev_grace.isDerived is True
+    assert ev_grace.sourceDocument == "Bilateral_Sale_Agreement.pdf"
+
+    # Scenario B: Year-only contractual date (e.g. Agreement only states 2029)
+    # Must NOT derive an exact day grace period
+    bundle_b = TransactionBundle(id="b-approx", title="Approximate Deal", sale_price=5_000_000.0, grace_period_months=6)
+    bundle_b.documents = [doc_sale]
+    bundle_b.extracted_attributes = [
+        ExtractedAttribute(id="at-b", bundle_id="b-approx", document_id="d-orchard-sale", attribute_key="possession_date", attribute_value="2029", normalized_value="2029", unit="date:YEAR", source_page=3),
+    ]
+    events_b, summary_b = ts._build_dynamic_timeline_events(bundle_b, 5_000_000.0)
+    grace_b = next((e for e in events_b if "Grace Period" in e.title), None)
+    assert grace_b is None, "Must never derive an exact grace period date from a year-only contractual source"
+    assert summary_b is None, "Single document with year-only date has 0 conflicts"
 
 

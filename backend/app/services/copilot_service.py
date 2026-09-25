@@ -144,12 +144,19 @@ class TransactionCopilotService:
         doc_name = bba.file_name if bba else "Builder_Buyer_Agreement_SkyView_A1204.pdf"
         doc_id = bba.id if bba else "doc-bba-01"
 
+        if bundle.id == "skyview-a1204":
+            handover_bullet = "• **Target Handover**: BBA Clause 11.2 commits to 31 December 2027 plus a 180-day grace period, despite the marketing brochure promising December 2026."
+        else:
+            p_date = bundle.possession_date or "Specified in contract"
+            grace = bundle.grace_period_months or 6
+            handover_bullet = f"• **Target Handover**: Contractual completion is scheduled for {p_date} with a {grace}-month developer grace buffer."
+
         answer = (
             f"**Transaction Overview: {bundle.project} — {bundle.unit}**\n\n"
             f"• **Property Details**: Unit {bundle.unit} on Floor {bundle.floor}, {bundle.tower}, developed by {bundle.developer}.\n"
             f"• **Area & Pricing**: Contractual carpet area is {bundle.carpet_area_sqft:.0f} sq.ft (against an advertised {bundle.advertised_carpet_area_sqft or 1450:.0f} sq.ft) "
             f"with an agreed consideration of ₹{bundle.sale_price/10_000_000:.2f} Cr.\n"
-            f"• **Target Handover**: BBA Clause 11.2 commits to 31 December 2027 plus a 180-day grace period, despite the marketing brochure promising December 2026.\n"
+            f"{handover_bullet}\n"
             f"• **Health Assessment**: Overall transaction health is rated at {bundle.health_score}/100, flagged with critical asymmetry in delay compensation and high earnest money forfeiture."
         )
 
@@ -272,36 +279,82 @@ class TransactionCopilotService:
         pe = (finding.primary_evidence if finding else {}) or {}
         se = (finding.secondary_evidence if finding else {}) or {}
 
-        answer = (
-            "**Delivery Date Discrepancy & Lineage:**\n\n"
-            "• **Marketing Brochure Promise**: Advertised completion and handover date: **31 December 2026**.\n"
-            "• **Allotment Letter Clause 4**: Target possession projected for **30 June 2027**.\n"
-            "• **Builder-Buyer Agreement Clause 11.2**: Formal binding completion date specified as **31 December 2027**, with an unconditional developer grace period of **180 days (30 June 2028)**.\n"
-            "• **Discrepancy Severity**: There is a **12 to 18 month delivery slippage** between preliminary promotional commitments and the formal legal agreement."
-        )
+        if bundle.id == "skyview-a1204":
+            answer = (
+                "**Delivery Date Discrepancy & Lineage:**\n\n"
+                "• **Marketing Brochure**: Target handover year **2027** (exact day not specified in promotional copy).\n"
+                "• **Allotment Letter Clause 4**: Target possession projected for **30 June 2027**.\n"
+                "• **Builder-Buyer Agreement Clause 11.2**: Formal binding completion date specified as **31 December 2027**, with an unconditional developer grace period of **180 days (30 June 2028)**.\n"
+                "• **Discrepancy Severity**: There is a **6-month delivery disparity** between the Allotment Letter commitment (30 June 2027) and the Builder-Buyer Agreement (31 December 2027)."
+            )
+            citations = [
+                CopilotCitationSchema(
+                    documentId=pe.get("documentId", "doc-allotment-02"),
+                    documentName=pe.get("documentName", "Allotment_Letter_Signed_A1204.pdf"),
+                    documentType=pe.get("documentType", "ALLOTMENT_LETTER"),
+                    pageNumber=pe.get("pageNumber", 2),
+                    clauseNumber="Paragraph 4",
+                    clauseTitle="Possession Timeline",
+                    excerpt=pe.get("excerpt", "Target possession and handover of Unit A-1204 is projected for 30th June 2027 upon completion of architectural finishes."),
+                    relevanceScore=0.95,
+                ),
+                CopilotCitationSchema(
+                    documentId=se.get("documentId", "doc-bba-01"),
+                    documentName=se.get("documentName", "Builder_Buyer_Agreement_SkyView_A1204.pdf"),
+                    documentType=se.get("documentType", "BUILDER_BUYER_AGREEMENT"),
+                    pageNumber=se.get("pageNumber", 19),
+                    clauseNumber="Clause 11.2",
+                    clauseTitle="Completion & Grace Period",
+                    excerpt=se.get("excerpt", "The Promoter proposes to complete construction of the Apartment by 31st December 2027. The Promoter shall be entitled to an unconditional grace period of one hundred eighty (180) days thereafter."),
+                    relevanceScore=0.97,
+                ),
+            ]
+        else:
+            # Dynamic date synthesis for custom transactions
+            doc_map = {d.id: d for d in bundle.documents}
+            possession_attrs = [a for a in bundle.extracted_attributes if a.attribute_key == "possession_date"]
+            
+            bullets = []
+            citations = []
+            seen_docs = set()
+            for attr in possession_attrs:
+                doc = doc_map.get(attr.document_id)
+                doc_name = doc.file_name if doc else "Document"
+                if doc_name in seen_docs:
+                    continue
+                seen_docs.add(doc_name)
+                
+                prec = attr.unit.replace("date:", "") if (attr.unit and attr.unit.startswith("date:")) else ("YEAR" if len(attr.normalized_value or "") == 4 else "DAY")
+                display_date = attr.attribute_value or attr.normalized_value
+                if prec == "YEAR":
+                    bullets.append(f"• **{doc_name}**: Target handover year **{display_date}** (exact day not specified in promotional copy).")
+                elif prec == "MONTH":
+                    bullets.append(f"• **{doc_name}**: Projected handover month **{display_date}**.")
+                else:
+                    bullets.append(f"• **{doc_name}**: Handover deadline specified as **{display_date}**.")
 
-        citations = [
-            CopilotCitationSchema(
-                documentId=pe.get("documentId", "doc-allotment-02"),
-                documentName=pe.get("documentName", "Allotment_Letter_Signed_A1204.pdf"),
-                documentType=pe.get("documentType", "ALLOTMENT_LETTER"),
-                pageNumber=pe.get("pageNumber", 2),
-                clauseNumber="Paragraph 4",
-                clauseTitle="Possession Timeline",
-                excerpt=pe.get("excerpt", "Target possession and handover of Unit A-1204 is projected for 30th June 2027 upon completion of architectural finishes."),
-                relevanceScore=0.95,
-            ),
-            CopilotCitationSchema(
-                documentId=se.get("documentId", "doc-bba-01"),
-                documentName=se.get("documentName", "Builder_Buyer_Agreement_SkyView_A1204.pdf"),
-                documentType=se.get("documentType", "BUILDER_BUYER_AGREEMENT"),
-                pageNumber=se.get("pageNumber", 19),
-                clauseNumber="Clause 11.2",
-                clauseTitle="Completion & Grace Period",
-                excerpt=se.get("excerpt", "The Promoter proposes to complete construction of the Apartment by 31st December 2027. The Promoter shall be entitled to an unconditional grace period of one hundred eighty (180) days thereafter."),
-                relevanceScore=0.97,
-            ),
-        ]
+                citations.append(
+                    CopilotCitationSchema(
+                        documentId=attr.document_id or f"doc-{len(citations)+1}",
+                        documentName=doc_name,
+                        documentType=doc.document_type if doc else "DOCUMENT",
+                        pageNumber=attr.source_page or 1,
+                        clauseNumber=f"Clause {attr.source_clause}" if attr.source_clause else f"Page {attr.source_page or 1}",
+                        clauseTitle="Possession & Completion Timeline",
+                        excerpt=f"Extracted possession date: {display_date}.",
+                        relevanceScore=0.95,
+                    )
+                )
+
+            # Check finding for discrepancy summary
+            if finding and finding.description:
+                bullets.append(f"• **Discrepancy Analysis**: {finding.description}")
+            elif not bullets:
+                bullets.append("• **Discrepancy Analysis**: No possession date specifications detected in the uploaded documents.")
+            else:
+                bullets.append("• **Discrepancy Analysis**: Handover milestones appear consistent or non-conflicting across documents.")
+
+            answer = "**Delivery Date Discrepancy & Lineage:**\n\n" + "\n".join(bullets)
 
         return CopilotQueryResponseSchema(
             query=query,

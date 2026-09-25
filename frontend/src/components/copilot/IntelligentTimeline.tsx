@@ -94,6 +94,8 @@ export const IntelligentTimeline: React.FC<IntelligentTimelineProps> = ({
       {/* Conflict Alert Banner */}
       <TimelineConflictAlert
         conflictingEventsCount={conflictingCount}
+        conflictSummary={timelineData?.conflictSummary}
+        conflictingEvents={events.filter((e) => Boolean(e.conflictingDate))}
         onExploreConflicts={() => setFilter("CONFLICTS")}
       />
 

@@ -39,18 +39,21 @@ class TimelineService:
                 linkedObligationAmount=round(sale_price * 0.10, 2),
                 linkedObligationFormatted=format_currency_inr(sale_price * 0.10),
             ),
-            # 2. Marketing Promised Delivery Date (MARKETING / CONFLICTING)
+            # 2. Marketing Target Handover (MARKETING)
             TimelineEventSchema(
                 id="time-02",
                 title="Advertised Project Handover (Sales Brochure)",
-                eventDate="2026-12-31",
+                eventDate="2027",
                 dateType="MARKETING",
-                status="PAST",
-                description="Handover timeline advertised in primary marketing brochure and sales deck presented at booking.",
+                status="UPCOMING",
+                description="Target handover year (2027) advertised in primary sales brochure; exact day not specified.",
                 documentName="Sales_Brochure_SkyView_Residency.pdf",
                 pageNumber=2,
                 clauseReference="Project Highlights",
-                conflictingDate="2027-12-31",
+                precision="YEAR",
+                rawEvidence="target 2027 handover",
+                isDerived=False,
+                sourceDocument="Sales_Brochure_SkyView_Residency.pdf",
             ),
             # 3. Execution of Agreement for Sale (PAST / CONTRACTUAL)
             TimelineEventSchema(
@@ -65,6 +68,10 @@ class TimelineService:
                 clauseReference="Clause 3.1 (Payment Terms)",
                 linkedObligationAmount=round(sale_price * 0.10, 2),
                 linkedObligationFormatted=format_currency_inr(sale_price * 0.10),
+                precision="DAY",
+                rawEvidence="18th day of September 2026",
+                isDerived=False,
+                sourceDocument="Builder_Buyer_Agreement_SkyView_A1204.pdf",
             ),
             # 4. Projected Structural Milestone (INFERRED / UPCOMING)
             TimelineEventSchema(
@@ -79,6 +86,28 @@ class TimelineService:
                 clauseReference="Milestone Item 3",
                 linkedObligationAmount=round(sale_price * 0.10, 2),
                 linkedObligationFormatted=format_currency_inr(sale_price * 0.10),
+                precision="DAY",
+                rawEvidence="15 November 2026",
+                isDerived=False,
+                sourceDocument="Payment_Schedule_Milestone_Plan.pdf",
+            ),
+            # 4b. Allotment Letter Promised Handover (CONTRACTUAL / CONFLICTING)
+            TimelineEventSchema(
+                id="time-04b",
+                title="Allotment Letter Promised Handover",
+                eventDate="2027-06-30",
+                dateType="CONTRACTUAL",
+                status="UPCOMING",
+                description="Target possession committed in signed Allotment Letter (Paragraph 4).",
+                documentName="Allotment_Letter_Signed_A1204.pdf",
+                pageNumber=2,
+                clauseReference="Paragraph 4",
+                conflictingDate="2027-12-31",
+                conflictDetails="Differs from Builder_Buyer_Agreement_SkyView_A1204.pdf (31 December 2027) by 6-month delivery disparity.",
+                precision="DAY",
+                rawEvidence="30 June 2027",
+                isDerived=False,
+                sourceDocument="Allotment_Letter_Signed_A1204.pdf",
             ),
             # 5. Contractual Handover Deadline (CONTRACTUAL / CONFLICTING)
             TimelineEventSchema(
@@ -87,23 +116,32 @@ class TimelineService:
                 eventDate="2027-12-31",
                 dateType="CONTRACTUAL",
                 status="UPCOMING",
-                description="Formally agreed handover target in BBA Clause 11.1 (12 months later than marketing brochure).",
+                description="Formally agreed handover target in BBA Clause 11.1 (6 months later than Allotment Letter).",
                 documentName="Builder_Buyer_Agreement_SkyView_A1204.pdf",
                 pageNumber=18,
                 clauseReference="Clause 11.1 (Possession Handover)",
-                conflictingDate="2026-12-31",
+                conflictingDate="2027-06-30",
+                conflictDetails="Differs from Allotment_Letter_Signed_A1204.pdf (30 June 2027) by 6-month delivery disparity.",
+                precision="DAY",
+                rawEvidence="31 December 2027",
+                isDerived=False,
+                sourceDocument="Builder_Buyer_Agreement_SkyView_A1204.pdf",
             ),
-            # 6. Unilateral Grace Period Expiry (INFERRED / CONFLICTING)
+            # 6. Unilateral Grace Period Expiry (INFERRED / UPCOMING)
             TimelineEventSchema(
                 id="time-06",
                 title="Unilateral 180-Day Grace Period Expiry",
                 eventDate="2028-06-30",
                 dateType="INFERRED",
                 status="UPCOMING",
-                description="End of promoter's unconditional 180-day grace period; delay compensation becomes payable thereafter.",
+                description="Derived from contractual handover date (2027-12-31) in Builder_Buyer_Agreement_SkyView_A1204.pdf with 180-day grace period buffer; delay compensation becomes payable thereafter.",
                 documentName="Builder_Buyer_Agreement_SkyView_A1204.pdf",
                 pageNumber=19,
                 clauseReference="Clause 11.2 (Grace Period)",
+                precision="DAY",
+                rawEvidence="180 days grace period",
+                isDerived=True,
+                sourceDocument="Builder_Buyer_Agreement_SkyView_A1204.pdf",
             ),
             # 7. Final Handover & Registration (UNCERTAIN / CONDITIONAL)
             TimelineEventSchema(
@@ -118,12 +156,33 @@ class TimelineService:
                 clauseReference="Clause 12.1",
                 linkedObligationAmount=round(sale_price * 0.05, 2),
                 linkedObligationFormatted=format_currency_inr(sale_price * 0.05),
+                precision="UNCERTAIN",
+                isDerived=False,
+                sourceDocument="Builder_Buyer_Agreement_SkyView_A1204.pdf",
             ),
         ]
 
+    @staticmethod
+    def _are_dates_conflicting(val1: str, prec1: str, val2: str, prec2: str) -> bool:
+        """
+        Evaluates whether two normalized date strings genuinely conflict,
+        strictly respecting the source precision of each date.
+        - YEAR vs YEAR: conflict only if calendar years differ (e.g. 2026 vs 2027)
+        - YEAR vs DAY/MONTH: conflict only if year differs (e.g. 2027 and 2027-12-31 do NOT conflict)
+        - MONTH vs MONTH/DAY: conflict only if year-month differs
+        - DAY vs DAY: conflict if exact dates differ
+        """
+        if not val1 or not val2 or val1 == val2:
+            return False
+        if prec1 == "YEAR" or prec2 == "YEAR":
+            return val1[:4] != val2[:4]
+        if prec1 == "MONTH" or prec2 == "MONTH":
+            return val1[:7] != val2[:7]
+        return val1 != val2
+
     def _build_dynamic_timeline_events(
         self, bundle: TransactionBundle, sale_price: float
-    ) -> List[TimelineEventSchema]:
+    ) -> tuple[List[TimelineEventSchema], Optional[str]]:
         import calendar
 
         events: List[TimelineEventSchema] = []
@@ -134,21 +193,83 @@ class TimelineService:
             a for a in bundle.extracted_attributes if a.attribute_key == "possession_date"
         ]
 
-        # Deduplicate possession attributes per document (pick highest confidence)
+        # Deduplicate possession attributes per document (pick highest confidence & precision)
         doc_possession: Dict[str, Any] = {}
         for a in possession_attrs:
-            if a.document_id not in doc_possession or a.confidence > doc_possession[a.document_id].confidence:
+            if a.document_id not in doc_possession:
                 doc_possession[a.document_id] = a
+            else:
+                existing = doc_possession[a.document_id]
+                a_prec = "YEAR" if len(a.normalized_value or "") == 4 else "DAY"
+                ex_prec = "YEAR" if len(existing.normalized_value or "") == 4 else "DAY"
+                if (a_prec == "DAY" and ex_prec != "DAY") or a.confidence > existing.confidence:
+                    doc_possession[a.document_id] = a
 
-        # Check if there are conflicting dates across documents
-        unique_dates = {a.normalized_value for a in doc_possession.values() if a.normalized_value}
-
-        ev_idx = 1
-        possession_events = []
+        # Precompute precision for each document's possession attribute
+        doc_info: Dict[str, Dict[str, Any]] = {}
         for doc_id, attr in doc_possession.items():
             doc = doc_map.get(doc_id)
             doc_name = doc.file_name if doc else "Document"
             doc_type = (doc.document_type or "").upper() if doc else "DOCUMENT"
+            val = attr.normalized_value or ""
+            prec = attr.unit.replace("date:", "") if (attr.unit and attr.unit.startswith("date:")) else ("YEAR" if len(val) == 4 else ("MONTH" if len(val) == 7 else "DAY"))
+            doc_info[doc_id] = {
+                "attr": attr,
+                "doc": doc,
+                "doc_name": doc_name,
+                "doc_type": doc_type,
+                "val": val,
+                "prec": prec,
+            }
+
+        # Precision-aware cross-document conflict evaluation
+        conflict_pairs: List[tuple[str, str, str, str, str]] = []
+        conflicts_by_doc: Dict[str, tuple[str, str]] = {}
+
+        doc_ids = list(doc_info.keys())
+        for i in range(len(doc_ids)):
+            id_i = doc_ids[i]
+            info_i = doc_info[id_i]
+            for j in range(i + 1, len(doc_ids)):
+                id_j = doc_ids[j]
+                info_j = doc_info[id_j]
+
+                if self._are_dates_conflicting(info_i["val"], info_i["prec"], info_j["val"], info_j["prec"]):
+                    # Calculate difference description if both are DAY precision
+                    diff_desc = "discrepancy"
+                    if info_i["prec"] == "DAY" and info_j["prec"] == "DAY":
+                        try:
+                            d1 = datetime.strptime(info_i["val"][:10], "%Y-%m-%d")
+                            d2 = datetime.strptime(info_j["val"][:10], "%Y-%m-%d")
+                            diff_days = abs((d2 - d1).days)
+                            diff_m = round(diff_days / 30.4375)
+                            diff_desc = f"{diff_m}-month delivery disparity" if diff_m > 0 else f"{diff_days}-day disparity"
+                        except Exception:
+                            pass
+
+                    detail_i = f"Differs from {info_j['doc_name']} ({info_j['attr'].attribute_value or info_j['val']}) by {diff_desc}."
+                    detail_j = f"Differs from {info_i['doc_name']} ({info_i['attr'].attribute_value or info_i['val']}) by {diff_desc}."
+
+                    if id_i not in conflicts_by_doc:
+                        conflicts_by_doc[id_i] = (info_j["val"], detail_i)
+                    if id_j not in conflicts_by_doc:
+                        conflicts_by_doc[id_j] = (info_i["val"], detail_j)
+
+                    conflict_pairs.append((
+                        info_i["doc_name"],
+                        info_i["attr"].attribute_value or info_i["val"],
+                        info_j["doc_name"],
+                        info_j["attr"].attribute_value or info_j["val"],
+                        diff_desc,
+                    ))
+
+        ev_idx = 1
+        possession_events = []
+        for doc_id, info in doc_info.items():
+            attr = info["attr"]
+            doc_name = info["doc_name"]
+            doc_type = info["doc_type"]
+            prec = info["prec"]
 
             is_marketing = "BROCHURE" in doc_type or "brochure" in doc_name.lower() or "marketing" in doc_name.lower()
             is_allotment = "ALLOTMENT" in doc_type or "allotment" in doc_name.lower()
@@ -163,32 +284,22 @@ class TimelineService:
                 date_type = "CONTRACTUAL"
                 title = "Contractual Handover Deadline"
 
-            precision = attr.unit.replace("date:", "") if (attr.unit and attr.unit.startswith("date:")) else ("YEAR" if len(attr.normalized_value) == 4 else "DAY")
+            conflicting_date, conflict_details = conflicts_by_doc.get(doc_id, (None, None))
 
-            # Check if there's a conflicting date from another document
-            conflicting_date = None
-            if len(unique_dates) > 1:
-                for other_date in unique_dates:
-                    if other_date != attr.normalized_value:
-                        if precision == "YEAR" and other_date.startswith(attr.normalized_value):
-                            continue
-                        conflicting_date = other_date
-                        break
-
-            if precision == "YEAR":
-                desc = f"Target handover year ({attr.attribute_value}) stated in {doc_name}; exact day not specified."
-            elif precision == "MONTH":
-                desc = f"Projected completion month ({attr.attribute_value}) stated in {doc_name}."
+            if prec == "YEAR":
+                desc = f"Target handover year ({attr.attribute_value or info['val']}) stated in {doc_name}; exact day not specified."
+            elif prec == "MONTH":
+                desc = f"Projected completion month ({attr.attribute_value or info['val']}) stated in {doc_name}."
             else:
                 desc = f"Handover deadline committed in {doc_name}."
 
-            clause_ref = f"Clause {attr.source_clause}" if attr.source_clause else f"Page {attr.source_page}"
+            clause_ref = f"Clause {attr.source_clause}" if attr.source_clause else f"Page {attr.source_page or 1}"
 
             possession_events.append(
                 TimelineEventSchema(
                     id=f"time-{bundle.id}-{ev_idx:02d}",
                     title=title,
-                    eventDate=attr.normalized_value,
+                    eventDate=info["val"],
                     dateType=date_type,
                     status="UPCOMING",
                     description=desc,
@@ -196,6 +307,11 @@ class TimelineService:
                     pageNumber=attr.source_page or 1,
                     clauseReference=clause_ref,
                     conflictingDate=conflicting_date,
+                    conflictDetails=conflict_details,
+                    precision=prec,
+                    rawEvidence=attr.attribute_value,
+                    isDerived=False,
+                    sourceDocument=doc_name,
                 )
             )
             ev_idx += 1
@@ -205,10 +321,12 @@ class TimelineService:
         events.extend(possession_events)
 
         # 2. Check for Grace Period from Agreement / BBA
+        # NEVER derive an exact date from a year-only or month-only source
         contractual_candidates = [
-            e for e in possession_events if e.dateType == "CONTRACTUAL" and len(e.eventDate or "") == 10
+            e for e in possession_events
+            if e.dateType == "CONTRACTUAL" and e.precision == "DAY" and len(e.eventDate or "") == 10
         ]
-        bba_contractual = next((e for e in contractual_candidates if "agreement" in e.documentName.lower() or "bba" in e.documentName.lower()), None)
+        bba_contractual = next((e for e in contractual_candidates if "agreement" in (e.documentName or "").lower() or "bba" in (e.documentName or "").lower()), None)
         contractual_p = bba_contractual or (max(contractual_candidates, key=lambda x: x.eventDate) if contractual_candidates else None)
         grace_months = bundle.grace_period_months or 6
         if contractual_p and contractual_p.eventDate:
@@ -228,10 +346,14 @@ class TimelineService:
                         eventDate=expiry_str,
                         dateType="INFERRED",
                         status="UPCOMING",
-                        description=f"End of promoter's {grace_months}-month grace period; delay compensation becomes legally enforceable thereafter.",
+                        description=f"Derived from contractual handover date ({contractual_p.eventDate}) in {contractual_p.documentName} with {grace_months}-month grace period buffer; delay compensation becomes legally enforceable thereafter.",
                         documentName=contractual_p.documentName,
                         pageNumber=contractual_p.pageNumber,
                         clauseReference="Grace Period Clause",
+                        precision="DAY",
+                        rawEvidence=f"{grace_months} months grace period",
+                        isDerived=True,
+                        sourceDocument=contractual_p.documentName,
                     )
                 )
                 ev_idx += 1
@@ -252,10 +374,23 @@ class TimelineService:
                 clauseReference="Conveyance & OC",
                 linkedObligationAmount=round(sale_price * 0.05, 2),
                 linkedObligationFormatted=format_currency_inr(sale_price * 0.05),
+                precision="UNCERTAIN",
+                isDerived=False,
+                sourceDocument=bundle.documents[0].file_name if bundle.documents else "Uploaded Document",
             )
         )
 
-        return events
+        # Dynamic conflict summary construction
+        conflict_summary: Optional[str] = None
+        if conflict_pairs:
+            summaries = []
+            for (doc_a, val_a, doc_b, val_b, diff) in conflict_pairs:
+                summaries.append(
+                    f"{doc_a} specifies {val_a}, whereas {doc_b} stipulates {val_b} ({diff})."
+                )
+            conflict_summary = " ".join(summaries)
+
+        return events, conflict_summary
 
     async def get_reconciled_timeline(
         self, session: AsyncSession, bundle_id: str
@@ -268,8 +403,12 @@ class TimelineService:
 
         if bundle.id == "skyview-a1204":
             events = self._get_skyview_events(sale_price)
+            conflict_summary = (
+                "Allotment_Letter_Signed_A1204.pdf specifies 30 June 2027, whereas Builder_Buyer_Agreement_SkyView_A1204.pdf "
+                "stipulates 31 December 2027 (6-month delivery disparity)."
+            )
         else:
-            events = self._build_dynamic_timeline_events(bundle, sale_price)
+            events, conflict_summary = self._build_dynamic_timeline_events(bundle, sale_price)
 
         # Compute summary counts
         contractual_count = sum(1 for e in events if e.dateType == "CONTRACTUAL")
@@ -287,6 +426,7 @@ class TimelineService:
             marketingEventsCount=marketing_count,
             inferredEventsCount=inferred_count,
             uncertainEventsCount=uncertain_count,
+            conflictSummary=conflict_summary,
         )
 
 
