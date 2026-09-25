@@ -72,6 +72,7 @@ export interface ClauseItem {
   modelVersion?: string;
   datasetVersion?: string;
   topAlternatives?: Array<{ category: string; probability: number }>;
+  documentName?: string;
   explanationNotes?: string;
 }
 

@@ -40,6 +40,10 @@ class ClauseBoundaryDetector:
             r"^(?:SCHEDULE|ANNEXURE)\s+([A-Z\d]+)[\s:\.\-–]+([^\n]+)",
             re.IGNORECASE,
         ),
+        # Pattern 5: Numbered heading: 1. Property or 2) Consideration
+        re.compile(
+            r"^(\d{1,2})[\.\)][\s:\.\-–]+([A-Za-z][^\n]+)",
+        ),
     ]
 
     def segment_pages(self, pages: List[Tuple[int, str]]) -> List[RawClauseChunk]:
