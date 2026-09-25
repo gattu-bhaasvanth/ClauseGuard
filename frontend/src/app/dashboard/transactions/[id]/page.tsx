@@ -414,7 +414,11 @@ export default function TransactionOverviewPage({
 
         {/* Tab 3: Evidence Lineage Graph (Phase 10 Traceability) */}
         {activeTab === "lineage" && (
-          <EvidenceLineageGraph bundleId={transaction.id} />
+          <EvidenceLineageGraph
+            bundleId={transaction.id}
+            transaction={transaction}
+            commandCenterData={commandCenterData}
+          />
         )}
 
         {/* Tab 4: Semantic Exploration / RAG Workspace (Phase 8 Preserved) */}

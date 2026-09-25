@@ -123,6 +123,22 @@ class ClauseBoundaryDetector:
 
         return clauses
 
+    def detect_clauses(self, raw_text: str, page_number: int = 1) -> List[dict]:
+        """
+        Segments a single page of text and returns a list of dictionaries with
+        clause_number, title, and text for RAG chunking.
+        """
+        chunks = self.segment_pages([(page_number, raw_text)])
+        return [
+            {
+                "clause_number": c.clause_number,
+                "title": c.title,
+                "text": c.full_excerpt,
+            }
+            for c in chunks
+        ]
+
+
     def _match_header(self, line: str) -> Optional[Tuple[str, str]]:
         """Checks if a line matches any of the registered clause header patterns."""
         for pattern in self.PATTERNS:

@@ -185,6 +185,9 @@ class TimelineService:
     ) -> tuple[List[TimelineEventSchema], Optional[str]]:
         import calendar
 
+        if not bundle.documents:
+            return [], None
+
         events: List[TimelineEventSchema] = []
         doc_map = {d.id: d for d in bundle.documents}
 
@@ -372,8 +375,8 @@ class TimelineService:
                 documentName=bundle.documents[0].file_name if bundle.documents else "Uploaded Document",
                 pageNumber=1,
                 clauseReference="Conveyance & OC",
-                linkedObligationAmount=round(sale_price * 0.05, 2),
-                linkedObligationFormatted=format_currency_inr(sale_price * 0.05),
+                linkedObligationAmount=round(sale_price * 0.05, 2) if sale_price > 0 else None,
+                linkedObligationFormatted=format_currency_inr(sale_price * 0.05) if sale_price > 0 else None,
                 precision="UNCERTAIN",
                 isDerived=False,
                 sourceDocument=bundle.documents[0].file_name if bundle.documents else "Uploaded Document",
@@ -399,10 +402,10 @@ class TimelineService:
         if not bundle:
             raise ValueError(f"Transaction bundle '{bundle_id}' not found.")
 
-        sale_price = float(bundle.sale_price or 14_250_000.0)
+        sale_price = float(bundle.sale_price or 0.0)
 
         if bundle.id == "skyview-a1204":
-            events = self._get_skyview_events(sale_price)
+            events = self._get_skyview_events(sale_price if sale_price > 0 else 14_250_000.0)
             conflict_summary = (
                 "Allotment_Letter_Signed_A1204.pdf specifies 30 June 2027, whereas Builder_Buyer_Agreement_SkyView_A1204.pdf "
                 "stipulates 31 December 2027 (6-month delivery disparity)."

@@ -16,7 +16,10 @@ from app.schemas.copilot import (
 )
 from app.rag.rag_service import TransactionRAGService
 from app.rag.retriever import RankedChunkResult
-from app.services.transaction_intelligence_orchestrator import transaction_intelligence_orchestrator
+from app.services.transaction_intelligence_orchestrator import (
+    transaction_intelligence_orchestrator,
+    format_currency_inr,
+)
 
 
 REFUSAL_MESSAGE = (
@@ -141,23 +144,33 @@ class TransactionCopilotService:
     ) -> CopilotQueryResponseSchema:
         docs = bundle.documents
         bba = next((d for d in docs if "AGREEMENT" in (d.document_type or "").upper()), docs[0] if docs else None)
-        doc_name = bba.file_name if bba else "Builder_Buyer_Agreement_SkyView_A1204.pdf"
-        doc_id = bba.id if bba else "doc-bba-01"
+        doc_name = bba.file_name if bba else ("Builder_Buyer_Agreement_SkyView_A1204.pdf" if bundle.id == "skyview-a1204" else "Agreement.pdf")
+        doc_id = bba.id if bba else ("doc-bba-01" if bundle.id == "skyview-a1204" else "doc-01")
 
         if bundle.id == "skyview-a1204":
             handover_bullet = "• **Target Handover**: BBA Clause 11.2 commits to 31 December 2027 plus a 180-day grace period, despite the marketing brochure promising December 2026."
+            area_bullet = (
+                f"• **Area & Pricing**: Contractual carpet area is {bundle.carpet_area_sqft:.0f} sq.ft (against an advertised {bundle.advertised_carpet_area_sqft or 1450:.0f} sq.ft) "
+                f"with an agreed consideration of ₹{bundle.sale_price/10_000_000:.2f} Cr."
+            )
+            suggested_q2 = "What happens if the builder delays handover beyond December 2027?"
         else:
             p_date = bundle.possession_date or "Specified in contract"
-            grace = bundle.grace_period_months or 6
-            handover_bullet = f"• **Target Handover**: Contractual completion is scheduled for {p_date} with a {grace}-month developer grace buffer."
+            grace = f" with a {bundle.grace_period_months}-month developer grace buffer" if bundle.grace_period_months else ""
+            handover_bullet = f"• **Target Handover**: Contractual completion is scheduled for {p_date}{grace}."
+            adv_str = f" (against an advertised {bundle.advertised_carpet_area_sqft:.0f} sq.ft)" if bundle.advertised_carpet_area_sqft else ""
+            area_bullet = (
+                f"• **Area & Pricing**: Contractual carpet area is {bundle.carpet_area_sqft:.0f} sq.ft{adv_str} "
+                f"with an agreed consideration of {format_currency_inr(bundle.sale_price)}."
+            )
+            suggested_q2 = "What happens if the builder delays handover beyond the contractual deadline?"
 
         answer = (
             f"**Transaction Overview: {bundle.project} — {bundle.unit}**\n\n"
             f"• **Property Details**: Unit {bundle.unit} on Floor {bundle.floor}, {bundle.tower}, developed by {bundle.developer}.\n"
-            f"• **Area & Pricing**: Contractual carpet area is {bundle.carpet_area_sqft:.0f} sq.ft (against an advertised {bundle.advertised_carpet_area_sqft or 1450:.0f} sq.ft) "
-            f"with an agreed consideration of ₹{bundle.sale_price/10_000_000:.2f} Cr.\n"
+            f"{area_bullet}\n"
             f"{handover_bullet}\n"
-            f"• **Health Assessment**: Overall transaction health is rated at {bundle.health_score}/100, flagged with critical asymmetry in delay compensation and high earnest money forfeiture."
+            f"• **Health Assessment**: Overall transaction health is rated at {bundle.health_score}/100, evaluated across {len(bundle.findings)} flagged contractual items."
         )
 
         citation = CopilotCitationSchema(
@@ -167,7 +180,7 @@ class TransactionCopilotService:
             pageNumber=1,
             clauseNumber="Preamble & Schedule A",
             clauseTitle="Property Allotment & Specifications",
-            excerpt=f"Allotment of Unit {bundle.unit}, {bundle.project} with carpet area {bundle.carpet_area_sqft:.0f} sq.ft for agreed consideration of Rs. {bundle.sale_price:,.0f}.",
+            excerpt=f"Allotment of Unit {bundle.unit}, {bundle.project} with carpet area {bundle.carpet_area_sqft:.0f} sq.ft for agreed consideration of {format_currency_inr(bundle.sale_price)}.",
             relevanceScore=0.98,
         )
 
@@ -182,7 +195,7 @@ class TransactionCopilotService:
             bundleId=bundle.id,
             suggestedNextQuestions=[
                 "What are my biggest risks in this transaction?",
-                "What happens if the builder delays handover beyond December 2027?",
+                suggested_q2,
                 "What clauses should I negotiate before signing?",
             ],
         )
@@ -190,29 +203,53 @@ class TransactionCopilotService:
     async def _synthesize_top_risks(
         self, session: AsyncSession, bundle: TransactionBundle, query: str
     ) -> CopilotQueryResponseSchema:
-        citations = []
-        for finding in bundle.findings[:3]:
-            pe = finding.primary_evidence or {}
-            citations.append(
-                CopilotCitationSchema(
-                    documentId=pe.get("documentId", "doc-bba-01"),
-                    documentName=pe.get("documentName", "Builder_Buyer_Agreement_SkyView_A1204.pdf"),
-                    documentType=pe.get("documentType", "BUILDER_BUYER_AGREEMENT"),
-                    pageNumber=pe.get("pageNumber", 15),
-                    clauseNumber=pe.get("clauseNumber", finding.category),
-                    clauseTitle=finding.title,
-                    excerpt=pe.get("excerpt", finding.description),
-                    relevanceScore=0.92,
+        if bundle.id == "skyview-a1204":
+            citations = []
+            for finding in bundle.findings[:3]:
+                pe = finding.primary_evidence or {}
+                citations.append(
+                    CopilotCitationSchema(
+                        documentId=pe.get("documentId", "doc-bba-01"),
+                        documentName=pe.get("documentName", "Builder_Buyer_Agreement_SkyView_A1204.pdf"),
+                        documentType=pe.get("documentType", "BUILDER_BUYER_AGREEMENT"),
+                        pageNumber=pe.get("pageNumber", 15),
+                        clauseNumber=pe.get("clauseNumber", finding.category),
+                        clauseTitle=finding.title,
+                        excerpt=pe.get("excerpt", finding.description),
+                        relevanceScore=0.92,
+                    )
                 )
-            )
 
-        answer = (
-            "**Key Risks Detected in this Transaction Bundle:**\n\n"
-            "1. **Asymmetrical Delay Compensation (CRITICAL)**: Clause 4.3 charges 18% p.a. interest on buyer payment delays, while Clause 8.2 restricts developer delay compensation to ₹5/sq.ft/month (~2.4% p.a.), creating a ₹74,000/month imbalance.\n"
-            "2. **Excess Earnest Money Forfeiture (CRITICAL)**: Clause 6.1 permits the promoter to forfeit 20% of the entire purchase price (₹28.5 Lakhs) upon cancellation, double the 10% statutory limit prescribed under RERA Section 13.\n"
-            "3. **Unilateral Plan Alterations (HIGH)**: Clause 6.4 allows the builder to alter floor plans, layout, and room dimensions by up to 10% without prior buyer written consent, contrary to RERA Section 14.\n"
-            "4. **Carpet Area Shortfall (HIGH)**: 70 sq.ft reduction between marketing claims (1,450 sq.ft) and the agreement (1,380 sq.ft) without automatic pro-rata price adjustment."
-        )
+            answer = (
+                "**Key Risks Detected in this Transaction Bundle:**\n\n"
+                "1. **Asymmetrical Delay Compensation (CRITICAL)**: Clause 4.3 charges 18% p.a. interest on buyer payment delays, while Clause 8.2 restricts developer delay compensation to ₹5/sq.ft/month (~2.4% p.a.), creating a ₹74,000/month imbalance.\n"
+                "2. **Excess Earnest Money Forfeiture (CRITICAL)**: Clause 6.1 permits the promoter to forfeit 20% of the entire purchase price (₹28.5 Lakhs) upon cancellation, double the 10% statutory limit prescribed under RERA Section 13.\n"
+                "3. **Unilateral Plan Alterations (HIGH)**: Clause 6.4 allows the builder to alter floor plans, layout, and room dimensions by up to 10% without prior buyer written consent, contrary to RERA Section 14.\n"
+                "4. **Carpet Area Shortfall (HIGH)**: 70 sq.ft reduction between marketing claims (1,450 sq.ft) and the agreement (1,380 sq.ft) without automatic pro-rata price adjustment."
+            )
+        else:
+            citations = []
+            risk_bullets = []
+            for idx, finding in enumerate(bundle.findings[:5], 1):
+                pe = finding.primary_evidence or {}
+                citations.append(
+                    CopilotCitationSchema(
+                        documentId=pe.get("documentId", (bundle.documents[0].id if bundle.documents else f"doc-{idx}")),
+                        documentName=pe.get("documentName", (bundle.documents[0].file_name if bundle.documents else "Document")),
+                        documentType=pe.get("documentType", "DOCUMENT"),
+                        pageNumber=pe.get("pageNumber", 1),
+                        clauseNumber=pe.get("clauseNumber", finding.category),
+                        clauseTitle=finding.title,
+                        excerpt=pe.get("excerpt", finding.description),
+                        relevanceScore=0.92,
+                    )
+                )
+                risk_bullets.append(f"{idx}. **{finding.title} ({finding.severity})**: {finding.description}")
+
+            if not risk_bullets:
+                answer = "**Key Risks Detected in this Transaction Bundle:**\n\nNo critical contractual risks or discrepancies were detected across the analyzed documents."
+            else:
+                answer = "**Key Risks Detected in this Transaction Bundle:**\n\n" + "\n".join(risk_bullets)
 
         return CopilotQueryResponseSchema(
             query=query,
@@ -232,30 +269,67 @@ class TransactionCopilotService:
     async def _synthesize_delay_penalties(
         self, session: AsyncSession, bundle: TransactionBundle, query: str
     ) -> CopilotQueryResponseSchema:
-        finding = next((f for f in bundle.findings if f.category == "PENALTY"), None)
-        pe = (finding.primary_evidence if finding else {}) or {}
+        if bundle.id == "skyview-a1204":
+            finding = next((f for f in bundle.findings if f.category == "PENALTY"), None)
+            pe = (finding.primary_evidence if finding else {}) or {}
 
-        doc_name = pe.get("documentName", "Builder_Buyer_Agreement_SkyView_A1204.pdf")
-        doc_id = pe.get("documentId", "doc-bba-01")
+            doc_name = pe.get("documentName", "Builder_Buyer_Agreement_SkyView_A1204.pdf")
+            doc_id = pe.get("documentId", "doc-bba-01")
 
-        answer = (
-            "**Delayed Handover Provisions & Penalty Disparity Analysis:**\n\n"
-            "• **Developer's Obligation (Clause 8.2)**: If handover extends past 31 December 2027 and the 180-day grace period (30 June 2028), the promoter pays compensation at ₹5 per sq.ft of super area per month. For this 1,820 sq.ft unit, that amounts to **₹9,100 per month (~2.4% per annum)**.\n"
-            "• **Buyer's Obligation (Clause 4.3)**: Conversely, any delayed installment by the buyer incurs interest at **18% per annum compounded monthly** (~₹85,000/month on outstanding balances).\n"
-            "• **Net Financial Impact**: There is a **₹74,000/month asymmetric penalty disparity** favoring the developer.\n"
-            "• **Legal Standing**: Under RERA Section 18 and Supreme Court precedent (*Pioneer Urban Land v. Govindan Raghavan*), such one-sided clauses are considered unfair trade practices, and allottees are entitled to interest at the statutory rate (SBI MCLR + 2%)."
-        )
+            answer = (
+                "**Delayed Handover Provisions & Penalty Disparity Analysis:**\n\n"
+                "• **Developer's Obligation (Clause 8.2)**: If handover extends past 31 December 2027 and the 180-day grace period (30 June 2028), the promoter pays compensation at ₹5 per sq.ft of super area per month. For this 1,820 sq.ft unit, that amounts to **₹9,100 per month (~2.4% per annum)**.\n"
+                "• **Buyer's Obligation (Clause 4.3)**: Conversely, any delayed installment by the buyer incurs interest at **18% per annum compounded monthly** (~₹85,000/month on outstanding balances).\n"
+                "• **Net Financial Impact**: There is a **₹74,000/month asymmetric penalty disparity** favoring the developer.\n"
+                "• **Legal Standing**: Under RERA Section 18 and Supreme Court precedent (*Pioneer Urban Land v. Govindan Raghavan*), such one-sided clauses are considered unfair trade practices, and allottees are entitled to interest at the statutory rate (SBI MCLR + 2%)."
+            )
 
-        citation = CopilotCitationSchema(
-            documentId=doc_id,
-            documentName=doc_name,
-            documentType="BUILDER_BUYER_AGREEMENT",
-            pageNumber=15,
-            clauseNumber="Clause 8.2",
-            clauseTitle="Compensation for Delay in Possession",
-            excerpt=pe.get("excerpt", "In the event of delay in offering possession of the Apartment, the Promoter shall pay compensation at the rate of Rs. 5/- per sq. ft. of super area per month for the period of delay beyond the grace period."),
-            relevanceScore=0.99,
-        )
+            citation = CopilotCitationSchema(
+                documentId=doc_id,
+                documentName=doc_name,
+                documentType="BUILDER_BUYER_AGREEMENT",
+                pageNumber=15,
+                clauseNumber="Clause 8.2",
+                clauseTitle="Compensation for Delay in Possession",
+                excerpt=pe.get("excerpt", "In the event of delay in offering possession of the Apartment, the Promoter shall pay compensation at the rate of Rs. 5/- per sq. ft. of super area per month for the period of delay beyond the grace period."),
+                relevanceScore=0.99,
+            )
+        else:
+            finding = next((f for f in bundle.findings if f.category in ("PENALTY", "INTEREST_ASYMMETRY", "FORFEITURE")), None)
+            pe = (finding.primary_evidence if finding else {}) or {}
+            first_doc = bundle.documents[0] if bundle.documents else None
+
+            doc_name = pe.get("documentName", first_doc.file_name if first_doc else "Agreement.pdf")
+            doc_id = pe.get("documentId", first_doc.id if first_doc else "doc-01")
+
+            if finding:
+                answer = (
+                    "**Delayed Handover Provisions & Penalty Disparity Analysis:**\n\n"
+                    f"• **Finding ({finding.title})**: {finding.description}\n"
+                    f"• **Statutory Standard**: Under RERA Section 18, delay compensation and buyer default interest must be reciprocal (SBI Highest MCLR + 2% per annum).\n"
+                    f"• **Recommendation**: Seek an amendment making developer handover delay compensation equal to the interest charged on buyer delayed payments."
+                )
+                excerpt = pe.get("excerpt", finding.description)
+                clause_num = pe.get("clauseNumber", finding.category)
+            else:
+                answer = (
+                    "**Delayed Handover Provisions & Penalty Disparity Analysis:**\n\n"
+                    "• **Status**: No unilateral delay penalty clauses were flagged in the analyzed documents.\n"
+                    "• **Statutory Protection**: Ensure that any contract incorporates reciprocal interest parity under RERA Section 18 (SBI MCLR + 2%)."
+                )
+                excerpt = "Contractual delay penalty provisions review."
+                clause_num = "Section 18"
+
+            citation = CopilotCitationSchema(
+                documentId=doc_id,
+                documentName=doc_name,
+                documentType="BUILDER_BUYER_AGREEMENT",
+                pageNumber=pe.get("pageNumber", 1),
+                clauseNumber=clause_num,
+                clauseTitle="Delay Penalties & Compensation",
+                excerpt=excerpt,
+                relevanceScore=0.95,
+            )
 
         return CopilotQueryResponseSchema(
             query=query,
@@ -309,6 +383,7 @@ class TransactionCopilotService:
                     relevanceScore=0.97,
                 ),
             ]
+            suggested_q = "What happens if the builder delays handover beyond December 2027?"
         else:
             # Dynamic date synthesis for custom transactions
             doc_map = {d.id: d for d in bundle.documents}
@@ -355,6 +430,7 @@ class TransactionCopilotService:
                 bullets.append("• **Discrepancy Analysis**: Handover milestones appear consistent or non-conflicting across documents.")
 
             answer = "**Delivery Date Discrepancy & Lineage:**\n\n" + "\n".join(bullets)
+            suggested_q = "What happens if the builder delays handover beyond the agreed date?"
 
         return CopilotQueryResponseSchema(
             query=query,
@@ -366,7 +442,7 @@ class TransactionCopilotService:
             citations=citations,
             bundleId=bundle.id,
             suggestedNextQuestions=[
-                "What happens if the builder delays handover beyond December 2027?",
+                suggested_q,
                 "What clauses should I negotiate before signing?",
             ],
         )
@@ -374,24 +450,44 @@ class TransactionCopilotService:
     async def _synthesize_obligations(
         self, session: AsyncSession, bundle: TransactionBundle, query: str
     ) -> CopilotQueryResponseSchema:
-        answer = (
-            f"**Buyer Obligations Prior to Possession for Unit {bundle.unit}:**\n\n"
-            "1. **Payment Installments**: Adhere strictly to the construction-linked milestone schedule. Late payments trigger 18% annual interest under Clause 4.3.\n"
-            "2. **Execution of Conveyance & Stamp Duty**: Buyer must bear all applicable stamp duty, registration charges, and administrative documentation fees upon notice of possession.\n"
-            "3. **Maintenance Deposit & Corpus Fund**: Prior to physical handover, buyer must deposit Advance Maintenance Charges (12 months) and contribution to the Sinking/Corpus Fund.\n"
-            "4. **Execution of Maintenance Agreement**: Obligation to sign the tripartite maintenance agreement with the developer's nominated agency."
-        )
+        if bundle.id == "skyview-a1204":
+            answer = (
+                f"**Buyer Obligations Prior to Possession for Unit {bundle.unit}:**\n\n"
+                "1. **Payment Installments**: Adhere strictly to the construction-linked milestone schedule. Late payments trigger 18% annual interest under Clause 4.3.\n"
+                "2. **Execution of Conveyance & Stamp Duty**: Buyer must bear all applicable stamp duty, registration charges, and administrative documentation fees upon notice of possession.\n"
+                "3. **Maintenance Deposit & Corpus Fund**: Prior to physical handover, buyer must deposit Advance Maintenance Charges (12 months) and contribution to the Sinking/Corpus Fund.\n"
+                "4. **Execution of Maintenance Agreement**: Obligation to sign the tripartite maintenance agreement with the developer's nominated agency."
+            )
 
-        citation = CopilotCitationSchema(
-            documentId="doc-bba-01",
-            documentName="Builder_Buyer_Agreement_SkyView_A1204.pdf",
-            documentType="BUILDER_BUYER_AGREEMENT",
-            pageNumber=8,
-            clauseNumber="Clause 4.1 & Clause 7.3",
-            clauseTitle="Payment Schedule & Handover Conditions",
-            excerpt="The Allottee shall pay the total consideration in accordance with the Payment Plan and execute all necessary documentation, stamp duty, and maintenance deposits prior to taking handover.",
-            relevanceScore=0.94,
-        )
+            citation = CopilotCitationSchema(
+                documentId="doc-bba-01",
+                documentName="Builder_Buyer_Agreement_SkyView_A1204.pdf",
+                documentType="BUILDER_BUYER_AGREEMENT",
+                pageNumber=8,
+                clauseNumber="Clause 4.1 & Clause 7.3",
+                clauseTitle="Payment Schedule & Handover Conditions",
+                excerpt="The Allottee shall pay the total consideration in accordance with the Payment Plan and execute all necessary documentation, stamp duty, and maintenance deposits prior to taking handover.",
+                relevanceScore=0.94,
+            )
+        else:
+            first_doc = bundle.documents[0] if bundle.documents else None
+            answer = (
+                f"**Buyer Obligations Prior to Possession for {bundle.project} — Unit {bundle.unit}:**\n\n"
+                f"1. **Milestone Payments**: Pay agreed installments totaling {format_currency_inr(bundle.sale_price)} in adherence to the construction-linked demand schedule.\n"
+                "2. **Conveyance & Statutory Taxes**: Remit applicable stamp duty, registration charges, and GST prior to execution of the conveyance deed.\n"
+                "3. **Maintenance & Common Area Charges**: Remit Advance Maintenance Charges and Sinking Fund contributions prior to physical handover.\n"
+                "4. **Handover Protocol**: Execute the formal possession acknowledgment and society membership documentation."
+            )
+            citation = CopilotCitationSchema(
+                documentId=first_doc.id if first_doc else "doc-01",
+                documentName=first_doc.file_name if first_doc else "Agreement.pdf",
+                documentType=first_doc.document_type if first_doc else "AGREEMENT",
+                pageNumber=1,
+                clauseNumber="Payment Terms & Handover Obligations",
+                clauseTitle="Buyer Covenants and Handover Protocol",
+                excerpt=f"Buyer obligations under contract for Unit {bundle.unit}, consideration {format_currency_inr(bundle.sale_price)}.",
+                relevanceScore=0.94,
+            )
 
         return CopilotQueryResponseSchema(
             query=query,
@@ -411,25 +507,52 @@ class TransactionCopilotService:
     async def _synthesize_amendments(
         self, session: AsyncSession, bundle: TransactionBundle, query: str
     ) -> CopilotQueryResponseSchema:
-        answer = (
-            "**Recommended Amendments to Request Prior to Signing:**\n\n"
-            "1. **Clause 8.2 (Delay Compensation)**: Amend ₹5/sq.ft/month to reciprocal interest at **SBI Highest MCLR + 2% per annum** under RERA Section 18.\n"
-            "2. **Clause 6.1 (Earnest Money Forfeiture)**: Cap cancellation forfeiture to **10% of base consideration** under RERA Section 13, deleting deductions for unverified brokerages.\n"
-            "3. **Clause 6.4 (Unilateral Alterations)**: Require **prior written consent** for any layout or dimensional variation exceeding 1%.\n"
-            "4. **Carpet Area Price Adjustment**: Add written rider providing pro-rata refund for the 70 sq.ft difference between brochure and BBA Schedule A.\n"
-            "5. **Missing Compliance Disclosures**: Require promoter to append certified Sanctioned Building Plans and environmental approvals as annexures."
-        )
+        if bundle.id == "skyview-a1204":
+            answer = (
+                "**Recommended Amendments to Request Prior to Signing:**\n\n"
+                "1. **Clause 8.2 (Delay Compensation)**: Amend ₹5/sq.ft/month to reciprocal interest at **SBI Highest MCLR + 2% per annum** under RERA Section 18.\n"
+                "2. **Clause 6.1 (Earnest Money Forfeiture)**: Cap cancellation forfeiture to **10% of base consideration** under RERA Section 13, deleting deductions for unverified brokerages.\n"
+                "3. **Clause 6.4 (Unilateral Alterations)**: Require **prior written consent** for any layout or dimensional variation exceeding 1%.\n"
+                "4. **Carpet Area Price Adjustment**: Add written rider providing pro-rata refund for the 70 sq.ft difference between brochure and BBA Schedule A.\n"
+                "5. **Missing Compliance Disclosures**: Require promoter to append certified Sanctioned Building Plans and environmental approvals as annexures."
+            )
 
-        citation = CopilotCitationSchema(
-            documentId="doc-bba-01",
-            documentName="Builder_Buyer_Agreement_SkyView_A1204.pdf",
-            documentType="BUILDER_BUYER_AGREEMENT",
-            pageNumber=15,
-            clauseNumber="Clause 8.2 & Clause 6.1",
-            clauseTitle="Dispute Terms & Forfeiture Provisions",
-            excerpt="Operative terms governing buyer termination, late fee liabilities, and developer default compensation.",
-            relevanceScore=0.95,
-        )
+            citation = CopilotCitationSchema(
+                documentId="doc-bba-01",
+                documentName="Builder_Buyer_Agreement_SkyView_A1204.pdf",
+                documentType="BUILDER_BUYER_AGREEMENT",
+                pageNumber=15,
+                clauseNumber="Clause 8.2 & Clause 6.1",
+                clauseTitle="Dispute Terms & Forfeiture Provisions",
+                excerpt="Operative terms governing buyer termination, late fee liabilities, and developer default compensation.",
+                relevanceScore=0.95,
+            )
+        else:
+            amendments = []
+            for idx, finding in enumerate(bundle.findings[:4], 1):
+                amendments.append(f"{idx}. **{finding.title}**: Propose amending this clause to align with RERA statutory guidelines and require mutual consent.")
+            
+            if not amendments:
+                amendments = [
+                    "1. **Delay Penalty Reciprocity**: Require promoter compensation for delayed handover to match the interest charged on buyer late installments (SBI MCLR + 2%).",
+                    "2. **Earnest Money Forfeiture Cap**: Limit promoter cancellation deduction to a maximum of 10% of base consideration pursuant to RERA Section 13.",
+                    "3. **Plan Alterations**: Mandate prior written consent of allottee for any change in unit dimensions or layout exceeding 1% under RERA Section 14.",
+                    "4. **Statutory Approvals**: Require certified copies of sanctioned plans and Commencement Certificate to be annexed to the agreement.",
+                ]
+
+            answer = "**Recommended Amendments to Request Prior to Signing:**\n\n" + "\n".join(amendments)
+
+            first_doc = bundle.documents[0] if bundle.documents else None
+            citation = CopilotCitationSchema(
+                documentId=first_doc.id if first_doc else "doc-01",
+                documentName=first_doc.file_name if first_doc else "Agreement.pdf",
+                documentType=first_doc.document_type if first_doc else "AGREEMENT",
+                pageNumber=1,
+                clauseNumber="Negotiation Terms",
+                clauseTitle="Contractual Protections & Statutory Compliance",
+                excerpt="Negotiation points derived from transaction risk analysis and statutory benchmarks.",
+                relevanceScore=0.95,
+            )
 
         return CopilotQueryResponseSchema(
             query=query,

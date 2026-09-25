@@ -4,62 +4,73 @@ import React, { useState } from "react";
 import { GitBranch, FileText, Bookmark, ShieldAlert, ArrowRight, CheckCircle2 } from "lucide-react";
 
 interface EvidenceNode {
-  id: string;
+  id?: string;
   level: "TRANSACTION" | "DOCUMENT" | "PAGE" | "CLAUSE" | "FINDING" | "EVIDENCE";
   title: string;
   subtitle?: string;
   detail?: string;
 }
 
+interface LineageChain {
+  id: string;
+  title: string;
+  severity: string;
+  nodes: EvidenceNode[];
+}
+
 interface EvidenceLineageGraphProps {
   bundleId: string;
+  transaction?: any;
+  commandCenterData?: any;
   onOpenDocumentViewer?: (docName: string, pageNumber: number) => void;
 }
 
 export const EvidenceLineageGraph: React.FC<EvidenceLineageGraphProps> = ({
   bundleId,
+  transaction,
+  commandCenterData,
   onOpenDocumentViewer,
 }) => {
   const [selectedChainIndex, setSelectedChainIndex] = useState(0);
 
-  const LINEAGE_CHAINS = [
+  const SKYVIEW_LINEAGE_CHAINS = [
     {
       id: "chain-penalty",
       title: "Asymmetrical Delay Penalties Lineage",
       severity: "CRITICAL",
       nodes: [
         {
-          level: "TRANSACTION",
+          level: "TRANSACTION" as const,
           title: "SkyView Residency (Flat A-1204)",
           subtitle: "Bundle ID: skyview-a1204",
           detail: "₹1.43 Cr consideration, 1,380 sq.ft carpet area",
         },
         {
-          level: "DOCUMENT",
+          level: "DOCUMENT" as const,
           title: "Builder_Buyer_Agreement_SkyView_A1204.pdf",
           subtitle: "Type: BUILDER_BUYER_AGREEMENT (38 pages)",
           detail: "Primary binding registered contract",
         },
         {
-          level: "PAGE",
+          level: "PAGE" as const,
           title: "Page 15",
           subtitle: "Section: Possession & Handover",
           detail: "Operative terms governing delay liabilities",
         },
         {
-          level: "CLAUSE",
+          level: "CLAUSE" as const,
           title: "Clause 8.2: Delay Compensation",
           subtitle: "Classification: Payment & Delay Interest (98% Conf)",
           detail: "Promoter pays ₹5/sq.ft/month after grace period",
         },
         {
-          level: "FINDING",
+          level: "FINDING" as const,
           title: "Risk Finding: Asymmetrical Delay Penalties (risk-01)",
           subtitle: "Severity: CRITICAL",
           detail: "Buyer defaults incur 18% p.a. vs Developer paying ~2.4% p.a.",
         },
         {
-          level: "EVIDENCE",
+          level: "EVIDENCE" as const,
           title: "Verbatim Contractual Excerpt",
           subtitle: "Anchor: BBA_A1204_P15_C8.2",
           detail:
@@ -73,37 +84,37 @@ export const EvidenceLineageGraph: React.FC<EvidenceLineageGraphProps> = ({
       severity: "HIGH",
       nodes: [
         {
-          level: "TRANSACTION",
+          level: "TRANSACTION" as const,
           title: "SkyView Residency (Flat A-1204)",
           subtitle: "Bundle ID: skyview-a1204",
           detail: "Advertised 1,450 sq.ft vs BBA 1,380 sq.ft",
         },
         {
-          level: "DOCUMENT",
+          level: "DOCUMENT" as const,
           title: "Sales_Brochure_SkyView_Residency.pdf vs Agreement.pdf",
           subtitle: "Cross-Document Discrepancy Pair",
           detail: "Brochure Page 1 vs BBA Schedule A (Page 4)",
         },
         {
-          level: "PAGE",
+          level: "PAGE" as const,
           title: "BBA Page 4 & Brochure Page 1",
           subtitle: "Dimensional Specifications",
           detail: "70 sq.ft (-4.8%) net reduction",
         },
         {
-          level: "CLAUSE",
+          level: "CLAUSE" as const,
           title: "Schedule A vs Brochure Highlights",
           subtitle: "Classification: Carpet Area & Measurements",
           detail: "BBA Schedule A defines 1,380 sq.ft",
         },
         {
-          level: "FINDING",
+          level: "FINDING" as const,
           title: "Inconsistency Finding: Carpet Area Reduction (inc-01)",
           subtitle: "Severity: HIGH",
           detail: "Uncompensated ₹4.64 Lakhs valuation deficit",
         },
         {
-          level: "EVIDENCE",
+          level: "EVIDENCE" as const,
           title: "Verbatim Dual-Excerpt Pair",
           subtitle: "Dual Anchors: Brochure_P1 vs BBA_P4",
           detail:
@@ -112,6 +123,136 @@ export const EvidenceLineageGraph: React.FC<EvidenceLineageGraphProps> = ({
       ],
     },
   ];
+
+  // Dynamic chain generation for custom transactions
+  const dynamicChains: LineageChain[] = React.useMemo(() => {
+    if (bundleId === "skyview-a1204") return SKYVIEW_LINEAGE_CHAINS;
+
+    const chains: LineageChain[] = [];
+    const projName = transaction?.property?.project || transaction?.title || "Transaction";
+    const unitName = transaction?.property?.unit ? ` (${transaction.property.unit})` : "";
+    const devName = transaction?.property?.developer ? `Developer: ${transaction.property.developer}` : "";
+
+    // 1. Process inconsistencies
+    const inconsistencies = transaction?.inconsistencies || [];
+    inconsistencies.forEach((inc: any, idx: number) => {
+      const pe = inc.primaryEvidence || {};
+      const se = inc.secondaryEvidence || {};
+      chains.push({
+        id: inc.id || `inc-chain-${idx}`,
+        title: `${inc.title || "Discrepancy"} Lineage`,
+        severity: inc.severity || "HIGH",
+        nodes: [
+          {
+            level: "TRANSACTION",
+            title: `${projName}${unitName}`,
+            subtitle: `Bundle ID: ${bundleId}`,
+            detail: `${devName} • Cross-document reconciliation`,
+          },
+          {
+            level: "DOCUMENT",
+            title: `${pe.documentName || "Marketing Doc"} vs ${se.documentName || "Contract"}`,
+            subtitle: "Cross-Document Discrepancy Pair",
+            detail: "Contradictory representations across deal artifacts",
+          },
+          {
+            level: "PAGE",
+            title: `Pages ${pe.pageNumber || 1} & ${se.pageNumber || 1}`,
+            subtitle: "Comparative Artifact Pages",
+            detail: inc.title || "Discrepancy source pages",
+          },
+          {
+            level: "CLAUSE",
+            title: `${pe.clauseNumber || "Source A"} vs ${se.clauseNumber || "Source B"}`,
+            subtitle: `Category: ${inc.category || "Inconsistency"}`,
+            detail: inc.description || "Reconciled clause comparison",
+          },
+          {
+            level: "FINDING",
+            title: `Discrepancy: ${inc.title || "Finding"} (${inc.id || `inc-${idx}`})`,
+            subtitle: `Severity: ${inc.severity || "HIGH"}`,
+            detail: inc.description || "Contractual variance identified",
+          },
+          {
+            level: "EVIDENCE",
+            title: "Verbatim Dual-Excerpt Pair",
+            subtitle: "Reconciled Evidence",
+            detail: `Doc A: "${pe.excerpt || "Excerpt A"}" | Doc B: "${se.excerpt || "Excerpt B"}"`,
+          },
+        ],
+      });
+    });
+
+    // 2. Process risk findings
+    const findings = transaction?.findings || commandCenterData?.topRisks || transaction?.risks || [];
+    findings.forEach((finding: any, idx: number) => {
+      const pe = finding.primaryEvidence || {};
+      const docName = pe.documentName || transaction?.documents?.[0]?.name || "Contract.pdf";
+      const pageNum = pe.pageNumber || 1;
+      const clauseNum = pe.clauseNumber || finding.category || "General";
+      chains.push({
+        id: finding.id || `finding-chain-${idx}`,
+        title: `${finding.title || "Contractual Risk"} Lineage`,
+        severity: finding.severity || "HIGH",
+        nodes: [
+          {
+            level: "TRANSACTION",
+            title: `${projName}${unitName}`,
+            subtitle: `Bundle ID: ${bundleId}`,
+            detail: devName,
+          },
+          {
+            level: "DOCUMENT",
+            title: docName,
+            subtitle: `Type: ${pe.documentType || "CONTRACT"}`,
+            detail: "Primary binding contractual instrument",
+          },
+          {
+            level: "PAGE",
+            title: `Page ${pageNum}`,
+            subtitle: `Section: ${clauseNum}`,
+            detail: "Forensic source location for verified finding",
+          },
+          {
+            level: "CLAUSE",
+            title: `${clauseNum}: ${finding.title}`,
+            subtitle: `Classification: ${finding.category || "Risk"}`,
+            detail: finding.title,
+          },
+          {
+            level: "FINDING",
+            title: `Risk Finding: ${finding.title} (${finding.id || `risk-${idx}`})`,
+            subtitle: `Severity: ${finding.severity || "HIGH"}`,
+            detail: finding.description || "Contractual risk identified",
+          },
+          {
+            level: "EVIDENCE",
+            title: "Verbatim Contractual Excerpt",
+            subtitle: `Anchor: ${docName}_P${pageNum}`,
+            detail: `"${pe.excerpt || finding.description || "Verified clause excerpt"}"`,
+          },
+        ],
+      });
+    });
+
+    return chains;
+  }, [bundleId, transaction, commandCenterData]);
+
+  const LINEAGE_CHAINS = dynamicChains;
+
+  if (LINEAGE_CHAINS.length === 0) {
+    return (
+      <div className="rounded-xl bg-[#111622] border border-zinc-800 p-8 text-center space-y-3">
+        <GitBranch className="w-8 h-8 text-zinc-600 mx-auto" />
+        <h4 className="text-sm font-semibold text-zinc-300">
+          No Evidence Lineage Generated
+        </h4>
+        <p className="text-xs text-zinc-500 max-w-md mx-auto">
+          Upload and analyze documents for this transaction to extract clauses, detect discrepancies, and construct verifiable forensic lineage pathways.
+        </p>
+      </div>
+    );
+  }
 
   const currentChain = LINEAGE_CHAINS[selectedChainIndex] || LINEAGE_CHAINS[0];
 
@@ -151,7 +292,7 @@ export const EvidenceLineageGraph: React.FC<EvidenceLineageGraphProps> = ({
 
       {/* Visual Lineage Pathway */}
       <div className="space-y-3">
-        {currentChain.nodes.map((node, nIdx) => (
+        {currentChain.nodes.map((node: EvidenceNode, nIdx: number) => (
           <div key={nIdx} className="relative">
             {/* Connecting Arrow */}
             {nIdx > 0 && (

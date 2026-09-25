@@ -286,8 +286,8 @@ class TransactionBriefService:
                 summary=f"Acquisition of {bundle.unit} in {bundle.project}, developed by {bundle.developer}. Agreed total consideration is {cmd.financialExposure.baseConsiderationFormatted}.",
                 bulletPoints=[
                     f"Unit: {bundle.unit} ({bundle.tower})",
-                    f"Carpet Area: {bundle.carpet_area_sqft:.0f} sq.ft",
-                    f"Super Area: {bundle.super_area_sqft:.0f} sq.ft",
+                    f"Carpet Area: {bundle.carpet_area_sqft:.0f} sq.ft" + (f" (vs {bundle.advertised_carpet_area_sqft:.0f} sq.ft advertised)" if bundle.advertised_carpet_area_sqft else ""),
+                    f"Super Area: {bundle.super_area_sqft:.0f} sq.ft" if bundle.super_area_sqft else f"Carpet Area: {bundle.carpet_area_sqft:.0f} sq.ft",
                     f"Base Consideration: {cmd.financialExposure.baseConsiderationFormatted}",
                     f"Location: {bundle.location}",
                 ],

@@ -65,9 +65,15 @@ class ExecutiveSummarySynthesizer:
         # 4. Actionable Next Steps
         actions: List[str] = []
         if any(f.category == "AREA" for f in inconsistencies):
-            actions.append(
-                "Request written confirmation from promoter reconciling brochure carpet area (1,450 sq.ft) with agreement (1,380 sq.ft) and confirm pro-rata price adjustment."
-            )
+            area_inc = next((f for f in inconsistencies if f.category == "AREA"), None)
+            if area_inc and area_inc.description:
+                actions.append(
+                    f"Reconcile area variance between representations and agreement: {area_inc.title}."
+                )
+            else:
+                actions.append(
+                    "Request written confirmation from promoter reconciling promotional carpet area with formal agreement specifications and confirm pro-rata price adjustment."
+                )
         if any(f.category == "POSSESSION" for f in inconsistencies):
             actions.append(
                 "Verify registered completion deadline on the State RERA portal against the agreement completion date."

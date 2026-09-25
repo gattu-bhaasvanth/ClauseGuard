@@ -181,7 +181,7 @@ def map_bundle_to_detail(bundle: TransactionBundle) -> TransactionDetailSchema:
                     sourceDoc=bundle.documents[0].file_name if bundle.documents else "Agreement",
                     isMilestone=False,
                     status="TENTATIVE",
-                    description=f"Promised contractual handover date with {bundle.grace_period_months}-month grace period.",
+                    description=f"Promised contractual handover date{f' with {bundle.grace_period_months}-month grace period' if bundle.grace_period_months else ''}.",
                 )
             )
         payments = []
@@ -261,13 +261,13 @@ async def create_transaction(session: AsyncSession, data: TransactionCreateSchem
         city=data.city,
         location=f"{data.projectName}, {data.city}",
         property_type=data.propertyType or "Residential Apartment",
-        carpet_area_sqft=data.carpetAreaSqFt or 1200.0,
-        super_area_sqft=data.superAreaSqFt or 1600.0,
-        advertised_carpet_area_sqft=data.carpetAreaSqFt or 1200.0,
-        sale_price=data.approxPrice or 10000000.0,
-        possession_date="2027-12-31",
-        grace_period_months=6,
-        health_score=85,
+        carpet_area_sqft=data.carpetAreaSqFt or 0.0,
+        super_area_sqft=data.superAreaSqFt or 0.0,
+        advertised_carpet_area_sqft=data.carpetAreaSqFt or None,
+        sale_price=data.approxPrice or 0.0,
+        possession_date=None,
+        grace_period_months=0,
+        health_score=100,
         status="IN_PROGRESS",
     )
     session.add(bundle)

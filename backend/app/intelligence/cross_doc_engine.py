@@ -103,6 +103,29 @@ class CrossDocumentIntelligenceEngine:
 
         bundle.health_score = computed_score
         bundle.status = new_status
+
+        # Synchronize verified factual attributes from document extraction to bundle record
+        from app.intelligence.metadata_engine import metadata_engine
+        unified_meta = await metadata_engine.get_unified_transaction_metadata(session, bundle_id)
+        if unified_meta.carpetAreaSqft:
+            bundle.carpet_area_sqft = unified_meta.carpetAreaSqft
+        if unified_meta.superAreaSqft:
+            bundle.super_area_sqft = unified_meta.superAreaSqft
+        if unified_meta.advertisedCarpetAreaSqft:
+            bundle.advertised_carpet_area_sqft = unified_meta.advertisedCarpetAreaSqft
+        if unified_meta.salePrice:
+            bundle.sale_price = unified_meta.salePrice
+        if unified_meta.possessionDate:
+            bundle.possession_date = unified_meta.possessionDate
+        if unified_meta.gracePeriodMonths is not None and unified_meta.gracePeriodMonths > 0:
+            bundle.grace_period_months = unified_meta.gracePeriodMonths
+        if unified_meta.unitNumber and (not bundle.unit or bundle.unit in ("Unit", "Flat")):
+            bundle.unit = unified_meta.unitNumber
+        if unified_meta.tower and (not bundle.tower or bundle.tower == "Tower A"):
+            bundle.tower = unified_meta.tower
+        if unified_meta.developer and (not bundle.developer or bundle.developer == "Developer"):
+            bundle.developer = unified_meta.developer
+
         await session.commit()
 
         # 9. Format response
