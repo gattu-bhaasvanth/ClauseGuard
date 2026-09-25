@@ -22,7 +22,7 @@ class BaseDiscrepancyEvaluator:
 
 
 class AreaDiscrepancyEvaluator(BaseDiscrepancyEvaluator):
-    """Detects carpet area differences between marketing brochures, allotment letters, and agreements."""
+    """Detects area differences between marketing brochures, allotment letters, and agreements for the same area type."""
 
     def evaluate(
         self,
@@ -31,78 +31,85 @@ class AreaDiscrepancyEvaluator(BaseDiscrepancyEvaluator):
         attributes: List[ExtractedAttribute],
     ) -> List[Finding]:
         doc_map = {d.id: d for d in documents}
-        area_attrs = [a for a in attributes if a.attribute_key == "carpet_area"]
-        if len(area_attrs) < 2:
-            return []
-
         findings: List[Finding] = []
 
-        # Compare pairs across different documents
-        for i in range(len(area_attrs)):
-            for j in range(i + 1, len(area_attrs)):
-                a1 = area_attrs[i]
-                a2 = area_attrs[j]
-                if a1.document_id == a2.document_id:
-                    continue
+        # Evaluate discrepancies independently per area type (do NOT mix carpet area with built-up or super area)
+        for area_key, area_label in [
+            ("carpet_area", "Carpet Area"),
+            ("built_up_area", "Built-Up Area"),
+            ("super_area", "Super Built-Up Area"),
+        ]:
+            area_attrs = [a for a in attributes if a.attribute_key == area_key]
+            if len(area_attrs) < 2:
+                continue
 
-                try:
-                    val1 = float(a1.normalized_value)
-                    val2 = float(a2.normalized_value)
-                except (ValueError, TypeError):
-                    continue
+            found_for_key = False
+            for i in range(len(area_attrs)):
+                if found_for_key:
+                    break
+                for j in range(i + 1, len(area_attrs)):
+                    a1 = area_attrs[i]
+                    a2 = area_attrs[j]
+                    if a1.document_id == a2.document_id:
+                        continue
 
-                diff = val1 - val2
-                if abs(diff) > 5.0:  # Tolerance: 5 sq.ft
-                    doc1 = doc_map.get(a1.document_id)
-                    doc2 = doc_map.get(a2.document_id)
+                    try:
+                        val1 = float(a1.normalized_value)
+                        val2 = float(a2.normalized_value)
+                    except (ValueError, TypeError):
+                        continue
 
-                    # Put brochure or allotment first as primary, agreement as secondary
-                    if doc2 and "AGREEMENT" in (doc2.document_type or "").upper():
-                        primary_attr, sec_attr = a1, a2
-                        primary_doc, sec_doc = doc1, doc2
-                    else:
-                        primary_attr, sec_attr = a2, a1
-                        primary_doc, sec_doc = doc2, doc1
+                    diff = val1 - val2
+                    if abs(diff) > 5.0:  # Tolerance: 5 sq.ft
+                        doc1 = doc_map.get(a1.document_id)
+                        doc2 = doc_map.get(a2.document_id)
 
-                    paired_evidence = evidence_pairing_service.pair_discrepancy_evidence(
-                        doc_a=primary_doc,
-                        attr_a=primary_attr,
-                        doc_b=sec_doc,
-                        attr_b=sec_attr,
-                    )
+                        # Put brochure or allotment first as primary, agreement as secondary
+                        if doc2 and "AGREEMENT" in (doc2.document_type or "").upper():
+                            primary_attr, sec_attr = a1, a2
+                            primary_doc, sec_doc = doc1, doc2
+                        else:
+                            primary_attr, sec_attr = a2, a1
+                            primary_doc, sec_doc = doc2, doc1
 
-                    p_name = primary_doc.file_name if primary_doc else "Primary Document"
-                    s_name = sec_doc.file_name if sec_doc else "Agreement Document"
-
-                    findings.append(
-                        Finding(
-                            id=f"inc-area-{uuid.uuid4().hex[:6]}",
-                            bundle_id=bundle_id,
-                            finding_type="INCONSISTENCY",
-                            category="AREA",
-                            severity="HIGH",
-                            title="Carpet Area Discrepancy",
-                            description=(
-                                f"Discrepancy detected between documents: {p_name} mentions "
-                                f"{primary_attr.attribute_value}, whereas {s_name} stipulates "
-                                f"{sec_attr.attribute_value} (variance of {abs(diff):.1f} sq.ft)."
-                            ),
-                            impact=(
-                                f"Potential net reduction of {abs(diff):.1f} sq.ft between pre-contract "
-                                f"marketing/allotment representations and binding agreement specifications."
-                            ),
-                            recommendation_note=(
-                                "Under RERA provisions, allottees pay strictly for carpet area. "
-                                "Request written clarification whether total consideration will be adjusted."
-                            ),
-                            primary_evidence=paired_evidence["primary_evidence"],
-                            secondary_evidence=paired_evidence["secondary_evidence"],
-                            detected_at=datetime.utcnow(),
+                        paired_evidence = evidence_pairing_service.pair_discrepancy_evidence(
+                            doc_a=primary_doc,
+                            attr_a=primary_attr,
+                            doc_b=sec_doc,
+                            attr_b=sec_attr,
                         )
-                    )
-                    # Once a major discrepancy is flagged for carpet area, stop to avoid duplicate pairs
-                    return findings
 
+                        p_name = primary_doc.file_name if primary_doc else "Primary Document"
+                        s_name = sec_doc.file_name if sec_doc else "Agreement Document"
+
+                        findings.append(
+                            Finding(
+                                id=f"inc-area-{uuid.uuid4().hex[:6]}",
+                                bundle_id=bundle_id,
+                                finding_type="INCONSISTENCY",
+                                category="AREA",
+                                severity="HIGH",
+                                title=f"{area_label} Discrepancy",
+                                description=(
+                                    f"Discrepancy detected between documents: {p_name} mentions "
+                                    f"{primary_attr.attribute_value}, whereas {s_name} stipulates "
+                                    f"{sec_attr.attribute_value} (variance of {abs(diff):.1f} sq.ft)."
+                                ),
+                                impact=(
+                                    f"Potential net reduction of {abs(diff):.1f} sq.ft between pre-contract "
+                                    f"representations and binding agreement specifications."
+                                ),
+                                recommendation_note=(
+                                    "Under RERA provisions, allottees pay strictly for carpet area. "
+                                    "Request written clarification whether total consideration will be adjusted."
+                                ),
+                                primary_evidence=paired_evidence["primary_evidence"],
+                                secondary_evidence=paired_evidence["secondary_evidence"],
+                                detected_at=datetime.utcnow(),
+                            )
+                        )
+                        found_for_key = True
+                        break  # One discrepancy per area type is sufficient
         return findings
 
 

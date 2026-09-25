@@ -151,48 +151,135 @@ class TransactionRAGService:
             for c in chunks
         ]
 
+    DOCUMENT_ROLE_ALIASES = {
+        "ALLOTMENT": [
+            "letter of allotment", "unit allotment letter", "allotment letter", "allotment agreement", "allotment"
+        ],
+        "AGREEMENT_FOR_SALE": [
+            "agreement for sale", "sale agreement", "builder buyer agreement", "builder-buyer agreement",
+            "agreement of sale", "sale contract", "buyer agreement", "bba", "villa agreement"
+        ],
+        "BROCHURE": [
+            "project brochure", "marketing brochure", "sales brochure", "project overview",
+            "project information", "marketing document", "sales deck", "e-brochure", "brochure", "marketing"
+        ],
+        "BOOKING": [
+            "reservation agreement", "booking agreement", "booking form", "reservation form",
+            "application form", "booking", "reservation"
+        ],
+        "PAYMENT_SCHEDULE": [
+            "payment demand schedule", "demand schedule", "payment schedule", "payment plan",
+            "demand notice", "cost sheet", "payment demand"
+        ],
+        "CONVEYANCE": [
+            "conveyance deed", "sale deed", "conveyance"
+        ],
+        "LEASE": [
+            "lease agreement", "lease deed", "lease"
+        ],
+    }
+
+    @classmethod
+    def _doc_matches_role(cls, doc: Document, role: str) -> bool:
+        fname = (doc.file_name or "").lower().replace("_", " ").replace("-", " ")
+        dtype = (doc.document_type or "").lower()
+        aliases = cls.DOCUMENT_ROLE_ALIASES.get(role, [])
+        for alias in aliases:
+            if alias in fname or alias in dtype:
+                return True
+        if role == "ALLOTMENT" and ("allotment" in dtype or "allotment" in fname):
+            return True
+        if role == "AGREEMENT_FOR_SALE" and (
+            "bba" in dtype or "sale" in dtype or "buyer" in dtype or "agreement" in dtype
+            or "sale_agreement" in fname or "sale agreement" in fname or "agreement for sale" in fname
+            or "agreement of sale" in fname or "sale contract" in fname or "builder" in fname
+        ):
+            if ("booking" in fname or "reservation" in fname) and "sale" not in fname and "bba" not in fname:
+                return False
+            return True
+        if role == "BROCHURE" and (
+            "brochure" in dtype or "marketing" in dtype
+            or "brochure" in fname or "marketing" in fname or "information" in fname or "overview" in fname
+        ):
+            return True
+        if role == "BOOKING" and (
+            "booking" in dtype or "reservation" in dtype
+            or "booking" in fname or "reservation" in fname or "application" in fname
+        ):
+            return True
+        if role == "PAYMENT_SCHEDULE" and (
+            "payment" in dtype or "demand" in dtype
+            or "payment" in fname or "demand" in fname or "schedule" in fname or "cost" in fname
+        ):
+            return True
+        return False
+
     def _identify_target_documents(self, query: str, documents: List[Document]) -> List[Document]:
         """
         Detects if user query explicitly mentions one or more specific documents.
         Supports filenames, document types, and common legal aliases.
         """
         q = query.lower()
-        matched: List[Document] = []
+
+        # 1. Identify which legal document roles and specific aliases the query explicitly asks for
+        active_roles = set()
+        matched_query_aliases = []
+        for role, aliases in self.DOCUMENT_ROLE_ALIASES.items():
+            for alias in aliases:
+                if re.search(r"\b" + re.escape(alias) + r"\b", q):
+                    active_roles.add(role)
+                    matched_query_aliases.append(alias)
+
+        # Map each active role to its candidate matching documents
+        role_candidates: Dict[str, List[Tuple[Document, int]]] = {r: [] for r in active_roles}
+
         for doc in documents:
-            fname = (doc.file_name or "").lower()
-            dtype = (doc.document_type or "").lower()
-            stem = fname.rsplit(".", 1)[0].replace("_", " ").replace("-", " ")
-            stripped_stem = re.sub(r"^\d+\s*", "", stem).strip()
+            fname = (doc.file_name or "").lower().replace("_", " ").replace("-", " ")
+            for role in active_roles:
+                if self._doc_matches_role(doc, role):
+                    # Compute specificity for this document within this role
+                    spec = 10
+                    for alias in matched_query_aliases:
+                        if alias in fname:
+                            spec = max(spec, len(alias) * 2)
+                    role_candidates[role].append((doc, spec))
 
-            is_match = False
-            # Check exact stem or stripped filename mention
-            if (stem and stem in q) or (stripped_stem and len(stripped_stem) >= 4 and stripped_stem in q):
-                is_match = True
-            elif any(
-                phrase in fname.replace("_", " ") or phrase in dtype
-                for phrase in [
-                    "allotment", "builder buyer", "bba", "sale agreement", "agreement for sale",
-                    "brochure", "marketing", "payment schedule", "payment plan", "villa agreement",
-                    "conveyance", "lease agreement", "sanction"
-                ]
-                if phrase in q
-            ):
-                is_match = True
-            elif "allotment" in q and ("allotment" in fname or "allotment" in dtype):
-                is_match = True
-            elif ("bba" in q or "builder buyer" in q or "builder-buyer" in q) and ("bba" in fname or "builder" in fname or "buyer" in fname or "bba" in dtype):
-                is_match = True
-            elif ("sale agreement" in q or "agreement for sale" in q or "agreement" in q and "agreement" in fname) and ("sale_agreement" in fname or "sale agreement" in fname or "sale" in dtype or "agreement" in fname):
-                is_match = True
-            elif ("brochure" in q or "marketing" in q) and ("brochure" in fname or "marketing" in fname or "brochure" in dtype or "marketing" in dtype):
-                is_match = True
-            elif ("payment schedule" in q or "payment plan" in q) and ("payment" in fname or "payment" in dtype):
-                is_match = True
+        matched_docs: List[Document] = []
+        for role, candidates in role_candidates.items():
+            if not candidates:
+                continue
+            max_spec = max(spec for _, spec in candidates)
+            # If any candidate for this role had a specific filename match (> 10), keep only specific matches
+            if max_spec > 10:
+                for doc, spec in candidates:
+                    if spec > 10 and doc not in matched_docs:
+                        matched_docs.append(doc)
+            else:
+                for doc, _ in candidates:
+                    if doc not in matched_docs:
+                        matched_docs.append(doc)
 
-            if is_match and doc not in matched:
-                matched.append(doc)
+        # Also check direct filename stem matches if not matched by role
+        if not matched_docs:
+            for doc in documents:
+                fname = (doc.file_name or "").lower()
+                stem = fname.rsplit(".", 1)[0].replace("_", " ").replace("-", " ")
+                stripped_stem = re.sub(r"^\d+\s*", "", stem).strip()
+                if (stem and stem in q) or (stripped_stem and len(stripped_stem) >= 4 and stripped_stem in q):
+                    if doc not in matched_docs:
+                        matched_docs.append(doc)
+                elif any(
+                    bigram in q
+                    for bigram in [
+                        f"{w1} {w2}"
+                        for w1, w2 in zip(stem.split()[:-1], stem.split()[1:])
+                        if len(w1) >= 3 and len(w2) >= 3 and f"{w1} {w2}" not in {"for sale", "of sale", "and sale"}
+                    ]
+                ):
+                    if doc not in matched_docs:
+                        matched_docs.append(doc)
 
-        return matched
+        return matched_docs
 
     async def query_transaction(
         self,
@@ -355,6 +442,20 @@ class TransactionRAGService:
         "tell", "me", "about", "state", "mention", "give", "show", "details", "there"
     }
 
+    REAL_ESTATE_SYNONYMS = {
+        "possession": {"possession", "handover", "delivery", "occupancy", "completion"},
+        "handover": {"possession", "handover", "delivery", "occupancy", "completion"},
+        "delivery": {"possession", "handover", "delivery", "occupancy", "completion"},
+        "completion": {"possession", "handover", "delivery", "occupancy", "completion"},
+        "price": {"price", "cost", "consideration", "amount", "valuation", "payment"},
+        "consideration": {"price", "cost", "consideration", "amount", "valuation", "payment"},
+        "cost": {"price", "cost", "consideration", "amount", "valuation", "payment"},
+        "area": {"area", "sqft", "sq.ft", "sqm", "carpet", "super", "dimensions"},
+        "penalty": {"penalty", "interest", "compensation", "damages", "forfeiture", "liquidated"},
+        "compensation": {"penalty", "interest", "compensation", "damages", "forfeiture", "liquidated"},
+        "default": {"default", "breach", "delay", "termination", "forfeiture"},
+    }
+
     def _verify_grounding(self, query: str, ranked: List[RankedChunkResult]) -> bool:
         """
         Anti-hallucination guardrail:
@@ -374,11 +475,17 @@ class TransactionRAGService:
         q_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", query.lower()))
         topic_words = {w for w in q_words if w not in self.GENERIC_CONTAINER_TERMS}
 
-        # Check if any substantive topic word is in the retrieved top chunks (using word boundaries)
+        # Expand substantive topic words with domain synonyms (e.g. possession <-> handover/completion)
+        expanded_topic_words = set(topic_words)
+        for tw in topic_words:
+            if tw in self.REAL_ESTATE_SYNONYMS:
+                expanded_topic_words.update(self.REAL_ESTATE_SYNONYMS[tw])
+
+        # Check if any substantive topic word or domain synonym is in the retrieved top chunks
         combined_text = " ".join([r.chunk.chunk_text.lower() for r in ranked[:3]])
         has_substantive_overlap = (
-            any(re.search(r"\b" + re.escape(tw) + r"\b", combined_text) for tw in topic_words)
-            if topic_words
+            any(re.search(r"\b" + re.escape(tw) + r"\b", combined_text) for tw in expanded_topic_words)
+            if expanded_topic_words
             else False
         )
 
@@ -442,6 +549,60 @@ class TransactionRAGService:
             return " ".join(words[:max_words]) + "..."
         return best_line
 
+    @staticmethod
+    def _detect_area_and_type(text: str) -> Optional[Tuple[float, str, str]]:
+        """
+        Extracts (normalized_sqft, raw_string, area_type) from text.
+        Area types: 'Carpet Area', 'Built-Up Area', 'Super Built-Up Area'.
+        """
+        from app.intelligence.entity_normalizer import AreaNormalizer
+
+        # 1. Super Area / Saleable Area / Chargeable Area
+        m_super = re.search(
+            r"(?:super\s+(?:built-?up\s+)?area|saleable\s+area|chargeable\s+area)\s*[:\-–]?\s*(?:of\s+|is\s+)?([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft|sqft|sft|sq\.?\s*m|square\s+feet))",
+            text,
+            re.IGNORECASE,
+        )
+        if m_super:
+            norm = AreaNormalizer.normalize(m_super.group(1))
+            if norm:
+                return (norm[0], m_super.group(1), "Super Built-Up Area")
+
+        # 2. Built-Up Area / Plinth Area (not super)
+        m_built = re.search(
+            r"(?<!super\s)(?<!super-)\b(?:built-?up\s+area|plinth\s+area)\s*[:\-–]?\s*(?:of\s+|is\s+)?([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft|sqft|sft|sq\.?\s*m|square\s+feet))",
+            text,
+            re.IGNORECASE,
+        )
+        if m_built:
+            norm = AreaNormalizer.normalize(m_built.group(1))
+            if norm:
+                return (norm[0], m_built.group(1), "Built-Up Area")
+
+        # 3. Carpet Area / Usable Area
+        m_carpet = re.search(
+            r"(?:carpet\s+area|usable\s+area|net\s+usable\s+floor\s+area|apartment\s+carpet\s+area)\s*[:\-–]?\s*(?:of\s+|is\s+|advertises\s+a\s+(?:carpet|usable)\s+area\s+of\s+)?([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft|sqft|sft|sq\.?\s*m|square\s+feet))",
+            text,
+            re.IGNORECASE,
+        )
+        if m_carpet:
+            norm = AreaNormalizer.normalize(m_carpet.group(1))
+            if norm:
+                return (norm[0], m_carpet.group(1), "Carpet Area")
+
+        # 4. Fallback general area
+        m_gen = re.search(
+            r"(\b[\d,]+(?:\.\d+)?\s*(?:sq\.?\s*ft|sqft|sq\.?\s*m|square\s+feet)\b)",
+            text,
+            re.IGNORECASE,
+        )
+        if m_gen:
+            norm = AreaNormalizer.normalize(m_gen.group(1))
+            if norm:
+                return (norm[0], m_gen.group(1), "Carpet Area")
+
+        return None
+
     def _synthesize_grounded_answer(
         self,
         query: str,
@@ -449,9 +610,8 @@ class TransactionRAGService:
         docs_by_id: Dict[str, Document],
     ) -> str:
         """
-        Synthesizes a grounded, deterministic answer citing specific clauses, numbers,
-        dates, percentages, and terms directly from retrieved context chunks.
-        Preserves date precision honestly (never invents missing day/month precision).
+        Dynamically synthesizes a concise, grounded answer referencing exact clauses,
+        dates, amounts, and discrepancies without hallucinating.
         """
         from app.intelligence.entity_normalizer import DateNormalizer
 
@@ -460,15 +620,16 @@ class TransactionRAGService:
 
         q_lower = query.lower()
         is_possession = any(k in q_lower for k in ["possession", "handover", "delivery", "completion"])
-        is_area = any(k in q_lower for k in ["carpet area", "super area", "area of the apartment", "unit area", "sq.ft", "sqft"])
+        is_area = any(k in q_lower for k in ["area", "carpet area", "super area", "built-up", "built up", "saleable", "plinth", "usable", "unit area", "sq.ft", "sqft", "square feet"])
 
         # Handle multi-document comparative questions
         if is_multi_doc and (is_possession or is_area or len(doc_ids_represented) >= 2):
             answer_parts = ["### Cross-Document Verification\n"]
             doc_summaries = []
             extracted_facts = {}
+            extracted_facts_by_type: Dict[str, Dict[str, float]] = {}
 
-            for doc_id in doc_ids_represented[:3]:
+            for doc_id in doc_ids_represented[:5]:
                 doc = docs_by_id.get(doc_id)
                 doc_name = doc.file_name if doc else "Document"
                 doc_chunk = next(r.chunk for r in ranked if r.chunk.document_id == doc_id)
@@ -487,6 +648,14 @@ class TransactionRAGService:
                         else:
                             fact_note = f" (Committed Date: **{norm_val}**)"
                         extracted_facts[doc_name] = (norm_val, prec)
+                elif is_area:
+                    area_info = self._detect_area_and_type(doc_chunk.chunk_text)
+                    if area_info:
+                        sqft_val, raw_area, a_type = area_info
+                        fact_note = f" ({a_type}: **{sqft_val:,.0f} sq.ft.** / {raw_area})"
+                        if a_type not in extracted_facts_by_type:
+                            extracted_facts_by_type[a_type] = {}
+                        extracted_facts_by_type[a_type][doc_name] = sqft_val
 
                 doc_summaries.append(
                     f"• **{doc_name}** ({clause_ref}){fact_note}:\n  > \"{excerpt}\""
@@ -499,6 +668,24 @@ class TransactionRAGService:
                 if any(v[0] != values[0][0] for v in values):
                     answer_parts.append(
                         "\n⚠️ **Discrepancy Note**: The formal agreement handover date shifts from the preliminary allotment/brochure timeline."
+                    )
+            elif is_area:
+                has_discrepancy = False
+                for a_type, type_facts in extracted_facts_by_type.items():
+                    if len(type_facts) >= 2:
+                        area_vals = list(type_facts.values())
+                        if any(abs(v - area_vals[0]) > 1.0 for v in area_vals):
+                            min_a = min(area_vals)
+                            max_a = max(area_vals)
+                            diff_a = max_a - min_a
+                            has_discrepancy = True
+                            answer_parts.append(
+                                f"\n⚠️ **Discrepancy Note**: {a_type} mismatch detected across documents ({min_a:,.0f} sq.ft. contractual vs. {max_a:,.0f} sq.ft. marketing/brochure, variance of {diff_a:,.0f} sq.ft.)."
+                            )
+                if not has_discrepancy and len(extracted_facts_by_type) >= 2:
+                    distinct_types = ", ".join(extracted_facts_by_type.keys())
+                    answer_parts.append(
+                        f"\nℹ️ **Area Type Distinction**: Retrieved documents cite distinct area metrics ({distinct_types}). Under RERA guidelines, these represent distinct spatial metrics and are evaluated independently."
                     )
 
             return "\n\n".join(answer_parts)
@@ -537,6 +724,14 @@ class TransactionRAGService:
                     answer_parts.append(f"\n**Target Handover Stated**: {norm_val} (Month precision).")
                 else:
                     answer_parts.append(f"\n**Contractual Handover Date**: {norm_val}.")
+        elif is_area:
+            area_info = self._detect_area_and_type(top_chunk.chunk_text)
+            if area_info:
+                sqft_val, raw_area, a_type = area_info
+                answer_parts.append(f"\n**Stated {a_type}**: {sqft_val:,.0f} sq.ft. ({raw_area}).")
+            elif key_figures:
+                unique_figures = list(dict.fromkeys([f.strip() for f in key_figures]))[:4]
+                answer_parts.append(f"\n**Key Terms Stated:** {', '.join(unique_figures)}.")
         elif key_figures:
             unique_figures = list(dict.fromkeys([f.strip() for f in key_figures]))[:4]
             answer_parts.append(f"\n**Key Terms Stated:** {', '.join(unique_figures)}.")

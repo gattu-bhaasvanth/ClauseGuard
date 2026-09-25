@@ -119,6 +119,69 @@ def test_area_wording_variations():
         assert area_ents[0].normalized_value == expected, f"Extracted {area_ents[0].normalized_value}, expected {expected}"
 
 
+def test_area_terminology_and_type_distinction():
+    """
+    Validates support for diverse real estate area terminology:
+    - Carpet area: 'usable area', 'usable carpet area', 'net usable floor area'
+    - Built-up area: 'built-up area', 'plinth area'
+    - Super built-up area: 'super area', 'super built-up area', 'saleable area', 'chargeable area'
+
+    Verifies that:
+    1. Different area types are extracted with distinct attribute keys.
+    2. Same area type differing between docs triggers a discrepancy.
+    3. Different area types (e.g. carpet vs super built-up) DO NOT trigger a false discrepancy.
+    """
+    extractor = TransactionEntityExtractor()
+
+    # 1. Extraction checks
+    carpet_ents = extractor._extract_from_text("Apartment featuring net usable floor area of 1,245 sq.ft.", page_number=1, clause_number=None)
+    assert any(e.attribute_key == "carpet_area" and e.normalized_value == "1245.0" for e in carpet_ents)
+
+    usable_ents = extractor._extract_from_text("Promotional flyer promises usable area: 1,310 sq.ft.", page_number=1, clause_number=None)
+    assert any(e.attribute_key == "carpet_area" and e.normalized_value == "1310.0" for e in usable_ents)
+
+    built_ents = extractor._extract_from_text("Architectural drawings specify plinth area of 1,380 sq.ft.", page_number=1, clause_number=None)
+    assert any(e.attribute_key == "built_up_area" and e.normalized_value == "1380.0" for e in built_ents)
+
+    super_ents = extractor._extract_from_text("Booking document records saleable area: 1,620 sq.ft.", page_number=1, clause_number=None)
+    assert any(e.attribute_key == "super_area" and e.normalized_value == "1620.0" for e in super_ents)
+
+    charge_ents = extractor._extract_from_text("Cost sheet calculates chargeable area of 1,620 sq.ft.", page_number=1, clause_number=None)
+    assert any(e.attribute_key == "super_area" and e.normalized_value == "1620.0" for e in charge_ents)
+
+    # 2. Evaluation checks: AreaDiscrepancyEvaluator
+    evaluator = AreaDiscrepancyEvaluator()
+    doc_a = Document(id="d-a", bundle_id="b-area", file_name="Doc_A.pdf", document_type="ALLOTMENT_LETTER")
+    doc_b = Document(id="d-b", bundle_id="b-area", file_name="Doc_B.pdf", document_type="AGREEMENT_FOR_SALE")
+    docs = [doc_a, doc_b]
+
+    # Scenario A: Genuine discrepancy on SAME area type (Carpet Area 1245 vs 1310)
+    same_type_attrs = [
+        ExtractedAttribute(id="a1", bundle_id="b-area", document_id="d-a", attribute_key="carpet_area", attribute_value="1,310 sq.ft.", normalized_value="1310.0", unit="sq.ft"),
+        ExtractedAttribute(id="a2", bundle_id="b-area", document_id="d-b", attribute_key="carpet_area", attribute_value="1,245 sq.ft.", normalized_value="1245.0", unit="sq.ft"),
+    ]
+    findings_same = evaluator.evaluate("b-area", docs, same_type_attrs)
+    assert len(findings_same) == 1
+    assert "Carpet Area Discrepancy" in findings_same[0].title
+    assert "65.0 sq.ft" in findings_same[0].description
+
+    # Scenario B: DIFFERENT area types (Carpet 1245 vs Super Area 1620) -> NO false discrepancy
+    diff_type_attrs = [
+        ExtractedAttribute(id="a1", bundle_id="b-area", document_id="d-a", attribute_key="super_area", attribute_value="1,620 sq.ft.", normalized_value="1620.0", unit="sq.ft"),
+        ExtractedAttribute(id="a2", bundle_id="b-area", document_id="d-b", attribute_key="carpet_area", attribute_value="1,245 sq.ft.", normalized_value="1245.0", unit="sq.ft"),
+    ]
+    findings_diff = evaluator.evaluate("b-area", docs, diff_type_attrs)
+    assert len(findings_diff) == 0, "Different area types must not be falsely flagged as a discrepancy!"
+
+    # Scenario C: DIFFERENT area types (Carpet 1245 vs Built-Up Area 1380) -> NO false discrepancy
+    carpet_built_attrs = [
+        ExtractedAttribute(id="a1", bundle_id="b-area", document_id="d-a", attribute_key="built_up_area", attribute_value="1,380 sq.ft.", normalized_value="1380.0", unit="sq.ft"),
+        ExtractedAttribute(id="a2", bundle_id="b-area", document_id="d-b", attribute_key="carpet_area", attribute_value="1,245 sq.ft.", normalized_value="1245.0", unit="sq.ft"),
+    ]
+    findings_cb = evaluator.evaluate("b-area", docs, carpet_built_attrs)
+    assert len(findings_cb) == 0, "Carpet area vs built-up area must not be falsely flagged as a discrepancy!"
+
+
 def test_possession_wording_variations():
     """
     Tests diverse possession phrasing:
@@ -265,9 +328,40 @@ def test_rag_target_document_identification():
     ids = {d.id for d in t3}
     assert "d-allot" in ids and "d-bba" in ids
 
-    # Query 4: General query (no specific document)
-    t4 = rag_service._identify_target_documents("What is the possession date?", all_docs)
-    assert len(t4) == 0
+    # Query 4: Project information and reservation aliases
+    doc_proj = Document(id="d-proj", bundle_id="b-1", file_name="General_Project_Information_Document.pdf", document_type="BROCHURE")
+    doc_res = Document(id="d-res", bundle_id="b-1", file_name="Standard_Reservation_Agreement.pdf", document_type="BOOKING_FORM")
+    doc_sched = Document(id="d-sched", bundle_id="b-1", file_name="Payment_Demand_Schedule.pdf", document_type="PAYMENT_SCHEDULE")
+    all_docs_expanded = all_docs + [doc_proj, doc_res, doc_sched]
+
+    t_proj = rag_service._identify_target_documents("What possession date is stated in the project information document?", all_docs_expanded)
+    assert len(t_proj) == 1
+    assert t_proj[0].id == "d-proj"
+
+    t_res = rag_service._identify_target_documents("What is the token amount in the reservation agreement?", all_docs_expanded)
+    assert len(t_res) == 1
+    assert t_res[0].id == "d-res"
+
+    # Query 5: Legal document aliases (Letter of Allotment, Agreement of Sale, Sale Contract, Demand Schedule)
+    t_loa = rag_service._identify_target_documents("What is the handover date in the Letter of Allotment?", all_docs_expanded)
+    assert len(t_loa) == 1
+    assert t_loa[0].id == "d-allot"
+
+    t_aos = rag_service._identify_target_documents("What is the delivery date in the agreement of sale?", all_docs_expanded)
+    assert len(t_aos) == 1
+    assert t_aos[0].id == "d-bba"
+
+    t_sc = rag_service._identify_target_documents("What are the default clauses in the sale contract?", all_docs_expanded)
+    assert len(t_sc) == 1
+    assert t_sc[0].id == "d-bba"
+
+    t_ds = rag_service._identify_target_documents("What milestones are listed in the payment demand schedule?", all_docs_expanded)
+    assert len(t_ds) == 1
+    assert t_ds[0].id == "d-sched"
+
+    # Query 6: General query (no specific document mentioned)
+    t_gen = rag_service._identify_target_documents("What is the possession date?", all_docs_expanded)
+    assert len(t_gen) == 0
 
 
 def test_rag_anti_hallucination_guardrail():

@@ -35,27 +35,44 @@ class TransactionEntityExtractor:
     CARPET_AREA_PATTERNS = [
         re.compile(
             r"(?:(?:contractual|allotted|allotment|marketing|promotional|rera|registered|net)?\s*)*"
-            r"(?:carpet\s+area|apartment\s+carpet\s+area|unit\s+area|total\s+area\s+of\s+the\s+apartment|area\s+of\s+the\s+apartment|area\s+of\s+the\s+unit)"
+            r"(?:carpet\s+area|apartment\s+carpet\s+area|unit\s+area|total\s+area\s+of\s+the\s+apartment|area\s+of\s+the\s+apartment|area\s+of\s+the\s+unit|usable\s+area|usable\s+carpet\s+area|net\s+usable\s+floor\s+area)"
             r"(?:\s+of\s+(?:the\s+)?(?:unit|apartment|flat|property))?"
             r"(?:\s+(?:admeasuring|measuring))?"
             r"\s*[:\-–=]?\s*"
-            r"(?:of\s+|is\s+|advertises\s+a\s+carpet\s+area\s+of\s+)?"
+            r"(?:of\s+|is\s+|advertises\s+a\s+(?:carpet|usable)\s+area\s+of\s+)?"
             r"([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?|square\s+feet|square\s+met(?:er|re)s?))",
             re.IGNORECASE,
         ),
         re.compile(
-            r"([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?))\s*(?:of\s+)?(?:contractual|allotted|marketing|promotional|rera)?\s*carpet\s+area",
+            r"([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?))\s*(?:of\s+)?(?:contractual|allotted|marketing|promotional|rera)?\s*(?:carpet|usable)\s+area",
             re.IGNORECASE,
         ),
         re.compile(
-            r"advertises\s+a\s+carpet\s+area\s+of\s+([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?|square\s+feet))",
+            r"advertises\s+a\s+(?:carpet|usable)\s+area\s+of\s+([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?|square\s+feet))",
+            re.IGNORECASE,
+        ),
+    ]
+
+    BUILT_UP_AREA_PATTERNS = [
+        re.compile(
+            r"(?<!super\s)(?<!super-)\b(?:built-?up\s+area|plinth\s+area)\s*[:\-–]?\s*(?:of\s+|is\s+)?([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?|square\s+feet|square\s+met(?:er|re)s?))",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?))\s*(?:of\s+)?(?<!super\s)(?<!super-)(?:built-?up\s+area|plinth\s+area)",
             re.IGNORECASE,
         ),
     ]
 
     SUPER_AREA_PATTERNS = [
-        re.compile(r"(?:super\s+(?:built-?up\s+)?area|built-?up\s+area)\s*[:\-–]?\s*(?:of\s+|is\s+)?([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?|square\s+feet))", re.IGNORECASE),
-        re.compile(r"([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?))\s*(?:of\s+)?super\s+(?:built-?up\s+)?area", re.IGNORECASE),
+        re.compile(
+            r"(?:super\s+(?:built-?up\s+)?area|saleable\s+area|chargeable\s+area)\s*[:\-–]?\s*(?:of\s+|is\s+)?([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?|square\s+feet|square\s+met(?:er|re)s?))",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?))\s*(?:of\s+)?(?:super\s+(?:built-?up\s+)?area|saleable\s+area|chargeable\s+area)",
+            re.IGNORECASE,
+        ),
     ]
 
     UNIT_PATTERNS = [
@@ -187,6 +204,25 @@ class TransactionEntityExtractor:
                             source_clause=clause_number,
                             raw_excerpt=self._get_context_window(text, m.start(), m.end()),
                             confidence=0.95 if clause_number else 0.85,
+                        )
+                    )
+
+        # Built-Up Area / Plinth Area
+        for pat in self.BUILT_UP_AREA_PATTERNS:
+            for m in pat.finditer(text):
+                raw_val = m.group(1).strip()
+                norm = AreaNormalizer.normalize(raw_val)
+                if norm:
+                    found.append(
+                        ExtractedEntity(
+                            attribute_key="built_up_area",
+                            attribute_value=raw_val,
+                            normalized_value=str(norm[0]),
+                            unit=norm[1],
+                            source_page=page_number,
+                            source_clause=clause_number,
+                            raw_excerpt=self._get_context_window(text, m.start(), m.end()),
+                            confidence=0.92,
                         )
                     )
 

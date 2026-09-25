@@ -12,6 +12,7 @@ from app.schemas.matrix import (
 
 ATTRIBUTE_LABELS: Dict[str, str] = {
     "carpet_area": "Carpet Area",
+    "built_up_area": "Built-Up Area",
     "super_area": "Super Built-Up Area",
     "total_price": "Total Consideration / Price",
     "possession_date": "Promised Possession Date",
