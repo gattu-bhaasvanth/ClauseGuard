@@ -60,7 +60,7 @@ export const RiskVectorGrid: React.FC<RiskVectorGridProps> = ({
           <div
             key={v.id}
             onClick={() => onSelectVector?.(v.id)}
-            className={`flex flex-col justify-between p-4 rounded-xl bg-[#111622]/80 border ${colors.border} transition-all duration-200 hover:bg-[#141b2b] cursor-pointer group`}
+            className={`flex flex-col justify-between p-4 rounded-xl bg-[#111622]/80 border ${colors.border} transition-all duration-200 ease-out hover:bg-[#141b2b] hover:-translate-y-0.5 hover:shadow-lg cursor-pointer group`}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {

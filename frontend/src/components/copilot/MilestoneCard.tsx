@@ -47,10 +47,10 @@ export const MilestoneCard: React.FC<MilestoneCardProps> = ({
 
   return (
     <div
-      className={`p-4 rounded-xl bg-[#111622] border transition-all duration-200 ${
+      className={`p-4 rounded-xl bg-[#111622] border transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lg ${
         event.conflictingDate
-          ? "border-amber-500/40 hover:border-amber-500/60"
-          : "border-zinc-800 hover:border-zinc-700"
+          ? "border-amber-500/40 hover:border-amber-500/80 hover:shadow-amber-950/20"
+          : "border-zinc-800 hover:border-zinc-700/90 hover:shadow-black/20"
       }`}
     >
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">

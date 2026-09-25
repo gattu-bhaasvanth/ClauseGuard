@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AmbientBackground } from "@/components/layout/AmbientBackground";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -23,7 +24,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark scroll-smooth">
-      <body className="min-h-screen bg-background text-foreground antialiased selection:bg-emerald-500/20 selection:text-emerald-300">
+      <body className="min-h-screen bg-background text-foreground antialiased selection:bg-emerald-500/20 selection:text-emerald-300 relative">
+        <AmbientBackground />
         {children}
       </body>
     </html>

@@ -15,7 +15,7 @@ export function RiskCard({ risk, transactionId = "skyview-a1204" }: RiskCardProp
   const { citation } = risk;
 
   return (
-    <Card className="p-5 hover:border-zinc-700 transition-all">
+    <Card className="p-5 border-l-4 border-l-amber-500/80 hover:border-zinc-700/90 hover:shadow-lg hover:shadow-amber-950/20 hover:-translate-y-0.5 transition-all duration-200 ease-out">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2 flex-wrap">

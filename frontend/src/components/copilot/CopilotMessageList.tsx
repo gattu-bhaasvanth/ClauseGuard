@@ -81,15 +81,15 @@ export const CopilotMessageList: React.FC<CopilotMessageListProps> = ({
                       <button
                         key={cIdx}
                         onClick={() => onSelectCitation?.(c)}
-                        className="text-left text-xs bg-zinc-900/90 hover:bg-zinc-800 border border-emerald-500/30 hover:border-emerald-400/60 text-zinc-200 px-2.5 py-1.5 rounded-lg transition-all active:scale-95 group flex items-center gap-1.5"
+                        className="text-left text-xs bg-zinc-900/90 hover:bg-zinc-800/90 border border-emerald-500/30 hover:border-emerald-400 hover:shadow-subtle-glow hover:-translate-y-0.5 text-zinc-200 px-3 py-1.5 rounded-lg transition-all duration-200 active:scale-95 group flex items-center gap-2 shadow-sm"
                       >
-                        <span className="font-mono text-[10px] text-emerald-400">
+                        <span className="font-mono text-[10px] text-emerald-400 font-semibold">
                           {c.clauseNumber || `Page ${c.pageNumber}`}
                         </span>
-                        <span className="text-zinc-400 text-[11px] truncate max-w-[180px]">
+                        <span className="text-zinc-400 text-[11px] truncate max-w-[180px] group-hover:text-zinc-200 transition-colors">
                           {c.documentName}
                         </span>
-                        <span className="text-emerald-400 opacity-60 group-hover:opacity-100">
+                        <span className="text-emerald-400 opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all">
                           ↗
                         </span>
                       </button>

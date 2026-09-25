@@ -22,6 +22,10 @@ import {
 } from "@/components/documents/DocumentDropzone";
 import { LegalDisclaimerNotice } from "@/components/shared/LegalDisclaimerNotice";
 import {
+  ProcessingStatusPipeline,
+  ProcessingStage,
+} from "@/components/shared/ProcessingStatusPipeline";
+import {
   createTransaction,
   uploadTransactionDocument,
   registerTransactionDocument,
@@ -32,6 +36,7 @@ export default function NewTransactionPage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pipelineStage, setPipelineStage] = useState<ProcessingStage>("INGESTING");
 
   // Form State starts clean for a newly created transaction
   const [formData, setFormData] = useState({
@@ -47,6 +52,7 @@ export default function NewTransactionPage() {
 
   const handleLaunchAnalysis = async () => {
     setIsSubmitting(true);
+    setPipelineStage("INGESTING");
     try {
       const cleanPrice = formData.approxPrice.replace(/[^0-9.]/g, "");
       const numericPrice = cleanPrice ? parseFloat(cleanPrice) : 7500000;
@@ -63,6 +69,7 @@ export default function NewTransactionPage() {
       });
 
       const txId = created.id;
+      setPipelineStage("EXTRACTING");
 
       for (const item of files) {
         if (item.file && item.file.size > 0) {
@@ -87,14 +94,19 @@ export default function NewTransactionPage() {
         }
       }
 
+      setPipelineStage("CLASSIFYING");
+
       if (files.length > 0) {
         try {
+          setPipelineStage("VERIFYING");
           await analyzeTransaction(txId);
         } catch (e) {
           console.warn("Analysis trigger notification:", e);
         }
       }
 
+      setPipelineStage("READY");
+      await new Promise((resolve) => setTimeout(resolve, 400));
       router.push(`/dashboard/transactions/${txId}`);
     } catch (err) {
       console.error("Failed to launch custom transaction analysis:", err);
@@ -415,6 +427,18 @@ export default function NewTransactionPage() {
           )}
         </Button>
       </div>
+
+      {/* AI Processing Status Overlay */}
+      {isSubmitting && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <ProcessingStatusPipeline
+            currentStage={pipelineStage}
+            title={`Analyzing ${formData.projectName.trim() || "Transaction"}`}
+            subtitle="Ingesting, classifying statutory clauses, and running cross-document verification"
+            className="w-full max-w-2xl border-emerald-500/30"
+          />
+        </div>
+      )}
     </div>
   );
 }

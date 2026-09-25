@@ -307,7 +307,7 @@ export function SemanticExplorationWorkspace({
                     <div
                       key={idx}
                       onClick={() => handleCitationClick(citation)}
-                      className="p-3 rounded-lg bg-surface-subtle hover:bg-zinc-800/80 border border-surface-border hover:border-emerald-500/50 cursor-pointer transition-all space-y-2 group shadow-sm"
+                      className="p-3.5 rounded-xl bg-surface-subtle hover:bg-surface-hover/90 border border-surface-border hover:border-emerald-500/60 hover:shadow-subtle-glow hover:-translate-y-0.5 cursor-pointer transition-all duration-200 space-y-2 group shadow-sm"
                     >
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-semibold text-emerald-400 group-hover:text-emerald-300 font-mono text-[11px]">

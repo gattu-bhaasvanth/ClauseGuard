@@ -35,6 +35,7 @@ import { IntelligentTimeline } from "@/components/copilot/IntelligentTimeline";
 import { EvidenceLineageGraph } from "@/components/copilot/EvidenceLineageGraph";
 import { TransactionBriefModal } from "@/components/copilot/TransactionBriefModal";
 import { LegalDisclaimerNotice } from "@/components/shared/LegalDisclaimerNotice";
+import { ProcessingStatusPipeline } from "@/components/shared/ProcessingStatusPipeline";
 import { fetchCommandCenter, fetchTimeline, fetchTransactionById } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -171,11 +172,13 @@ export default function TransactionOverviewPage({
 
   if (isLoading || !transaction) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs text-zinc-400">Loading transaction workspace...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-[460px] p-4">
+        <ProcessingStatusPipeline
+          currentStage="VERIFYING"
+          title="Loading Transaction Intelligence"
+          subtitle="Hydrating unified transaction model, verified citations & copilot lineage"
+          className="w-full max-w-xl shadow-2xl border-emerald-500/20"
+        />
       </div>
     );
   }
