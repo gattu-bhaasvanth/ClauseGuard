@@ -121,6 +121,142 @@ class TimelineService:
             ),
         ]
 
+    def _build_dynamic_timeline_events(
+        self, bundle: TransactionBundle, sale_price: float
+    ) -> List[TimelineEventSchema]:
+        import calendar
+
+        events: List[TimelineEventSchema] = []
+        doc_map = {d.id: d for d in bundle.documents}
+
+        # 1. Collect all possession dates from extracted attributes
+        possession_attrs = [
+            a for a in bundle.extracted_attributes if a.attribute_key == "possession_date"
+        ]
+
+        # Deduplicate possession attributes per document (pick highest confidence)
+        doc_possession: Dict[str, Any] = {}
+        for a in possession_attrs:
+            if a.document_id not in doc_possession or a.confidence > doc_possession[a.document_id].confidence:
+                doc_possession[a.document_id] = a
+
+        # Check if there are conflicting dates across documents
+        unique_dates = {a.normalized_value for a in doc_possession.values() if a.normalized_value}
+
+        ev_idx = 1
+        possession_events = []
+        for doc_id, attr in doc_possession.items():
+            doc = doc_map.get(doc_id)
+            doc_name = doc.file_name if doc else "Document"
+            doc_type = (doc.document_type or "").upper() if doc else "DOCUMENT"
+
+            is_marketing = "BROCHURE" in doc_type or "brochure" in doc_name.lower() or "marketing" in doc_name.lower()
+            is_allotment = "ALLOTMENT" in doc_type or "allotment" in doc_name.lower()
+
+            if is_marketing:
+                date_type = "MARKETING"
+                title = "Advertised Project Handover"
+            elif is_allotment:
+                date_type = "CONTRACTUAL"
+                title = "Allotment Letter Promised Handover"
+            else:
+                date_type = "CONTRACTUAL"
+                title = "Contractual Handover Deadline"
+
+            precision = attr.unit.replace("date:", "") if (attr.unit and attr.unit.startswith("date:")) else ("YEAR" if len(attr.normalized_value) == 4 else "DAY")
+
+            # Check if there's a conflicting date from another document
+            conflicting_date = None
+            if len(unique_dates) > 1:
+                for other_date in unique_dates:
+                    if other_date != attr.normalized_value:
+                        if precision == "YEAR" and other_date.startswith(attr.normalized_value):
+                            continue
+                        conflicting_date = other_date
+                        break
+
+            if precision == "YEAR":
+                desc = f"Target handover year ({attr.attribute_value}) stated in {doc_name}; exact day not specified."
+            elif precision == "MONTH":
+                desc = f"Projected completion month ({attr.attribute_value}) stated in {doc_name}."
+            else:
+                desc = f"Handover deadline committed in {doc_name}."
+
+            clause_ref = f"Clause {attr.source_clause}" if attr.source_clause else f"Page {attr.source_page}"
+
+            possession_events.append(
+                TimelineEventSchema(
+                    id=f"time-{bundle.id}-{ev_idx:02d}",
+                    title=title,
+                    eventDate=attr.normalized_value,
+                    dateType=date_type,
+                    status="UPCOMING",
+                    description=desc,
+                    documentName=doc_name,
+                    pageNumber=attr.source_page or 1,
+                    clauseReference=clause_ref,
+                    conflictingDate=conflicting_date,
+                )
+            )
+            ev_idx += 1
+
+        # Sort possession events: earlier date first, marketing/contractual distinction
+        possession_events.sort(key=lambda e: (e.eventDate or "9999", e.dateType != "CONTRACTUAL"))
+        events.extend(possession_events)
+
+        # 2. Check for Grace Period from Agreement / BBA
+        contractual_candidates = [
+            e for e in possession_events if e.dateType == "CONTRACTUAL" and len(e.eventDate or "") == 10
+        ]
+        bba_contractual = next((e for e in contractual_candidates if "agreement" in e.documentName.lower() or "bba" in e.documentName.lower()), None)
+        contractual_p = bba_contractual or (max(contractual_candidates, key=lambda x: x.eventDate) if contractual_candidates else None)
+        grace_months = bundle.grace_period_months or 6
+        if contractual_p and contractual_p.eventDate:
+            try:
+                base_dt = datetime.strptime(contractual_p.eventDate, "%Y-%m-%d")
+                new_m = base_dt.month + grace_months
+                new_y = base_dt.year + (new_m - 1) // 12
+                new_m = ((new_m - 1) % 12) + 1
+                max_d = calendar.monthrange(new_y, new_m)[1]
+                expiry_dt = datetime(new_y, new_m, min(base_dt.day, max_d))
+                expiry_str = expiry_dt.strftime("%Y-%m-%d")
+
+                events.append(
+                    TimelineEventSchema(
+                        id=f"time-{bundle.id}-{ev_idx:02d}",
+                        title=f"Unilateral {grace_months}-Month Grace Period Expiry",
+                        eventDate=expiry_str,
+                        dateType="INFERRED",
+                        status="UPCOMING",
+                        description=f"End of promoter's {grace_months}-month grace period; delay compensation becomes legally enforceable thereafter.",
+                        documentName=contractual_p.documentName,
+                        pageNumber=contractual_p.pageNumber,
+                        clauseReference="Grace Period Clause",
+                    )
+                )
+                ev_idx += 1
+            except Exception:
+                pass
+
+        # 3. Final Contingent Milestone (UNCERTAIN)
+        events.append(
+            TimelineEventSchema(
+                id=f"time-{bundle.id}-{ev_idx:02d}",
+                title="Notice of Possession & Conveyance Deed Execution",
+                eventDate=None,
+                dateType="UNCERTAIN",
+                status="TENTATIVE",
+                description="Contingent upon developer obtaining statutory Occupation Certificate (OC) from the municipal planning authority.",
+                documentName=bundle.documents[0].file_name if bundle.documents else "Uploaded Document",
+                pageNumber=1,
+                clauseReference="Conveyance & OC",
+                linkedObligationAmount=round(sale_price * 0.05, 2),
+                linkedObligationFormatted=format_currency_inr(sale_price * 0.05),
+            )
+        )
+
+        return events
+
     async def get_reconciled_timeline(
         self, session: AsyncSession, bundle_id: str
     ) -> TimelineResponseSchema:
@@ -133,24 +269,7 @@ class TimelineService:
         if bundle.id == "skyview-a1204":
             events = self._get_skyview_events(sale_price)
         else:
-            events = []
-            if bundle.possession_date:
-                doc_name = bundle.documents[0].file_name if bundle.documents else "Uploaded Document"
-                events.append(
-                    TimelineEventSchema(
-                        id=f"time-{bundle.id}-01",
-                        title="Target Possession Handover",
-                        eventDate=bundle.possession_date,
-                        dateType="CONTRACTUAL",
-                        status="TENTATIVE",
-                        description=f"Promised contractual handover date with {bundle.grace_period_months}-month grace period.",
-                        documentName=doc_name,
-                        pageNumber=1,
-                        clauseReference="Possession Clause",
-                        linkedObligationAmount=round(sale_price, 2),
-                        linkedObligationFormatted=format_currency_inr(sale_price),
-                    )
-                )
+            events = self._build_dynamic_timeline_events(bundle, sale_price)
 
         # Compute summary counts
         contractual_count = sum(1 for e in events if e.dateType == "CONTRACTUAL")

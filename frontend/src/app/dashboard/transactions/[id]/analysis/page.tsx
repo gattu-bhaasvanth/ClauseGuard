@@ -120,6 +120,10 @@ export default function DocumentAnalysisPage({
         <div className="lg:col-span-7 h-[700px] lg:h-full flex flex-col">
           <DocumentViewerMock
             activeClauseId={selectedClause?.id || ""}
+            selectedClause={selectedClause}
+            documents={transaction.documents || []}
+            projectName={transaction.property?.project || transaction.property?.projectName || transaction.title}
+            unitNumber={transaction.property?.unit || transaction.property?.unitNumber}
             className="flex-1"
           />
         </div>
@@ -141,7 +145,7 @@ export default function DocumentAnalysisPage({
             {selectedClause ? (
               <EvidenceDrawer
                 clause={selectedClause}
-                documentName="Builder-Buyer Agreement"
+                documentName={selectedClause.documentName || transaction.documents?.[0]?.fileName || "Document"}
                 className="h-full"
                 onInspectAI={() => handleOpenInspector(selectedClause)}
               />

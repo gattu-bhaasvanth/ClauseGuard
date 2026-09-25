@@ -144,7 +144,14 @@ class TransactionMetadataEngine:
 
             if key == "carpet_area" and norm_val:
                 try:
-                    schema.carpetAreaSqft = float(norm_val)
+                    c_val = float(norm_val)
+                    if not schema.carpetAreaSqft:
+                        schema.carpetAreaSqft = c_val
+                    elif schema.carpetAreaSqft != c_val:
+                        # Secondary area detected (e.g. advertised in brochure vs agreement)
+                        if not schema.advertisedCarpetAreaSqft:
+                            schema.advertisedCarpetAreaSqft = max(schema.carpetAreaSqft, c_val)
+                            schema.carpetAreaSqft = min(schema.carpetAreaSqft, c_val)
                 except ValueError:
                     pass
             elif key == "super_area" and norm_val:
@@ -158,7 +165,10 @@ class TransactionMetadataEngine:
                 except ValueError:
                     pass
             elif key == "possession_date" and norm_val:
-                schema.possessionDate = norm_val
+                if a.unit == "date:YEAR" and schema.possessionDate and len(schema.possessionDate) > 4:
+                    pass
+                else:
+                    schema.possessionDate = norm_val
             elif key == "grace_period_months" and norm_val:
                 try:
                     schema.gracePeriodMonths = int(norm_val)

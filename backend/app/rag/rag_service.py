@@ -151,6 +151,49 @@ class TransactionRAGService:
             for c in chunks
         ]
 
+    def _identify_target_documents(self, query: str, documents: List[Document]) -> List[Document]:
+        """
+        Detects if user query explicitly mentions one or more specific documents.
+        Supports filenames, document types, and common legal aliases.
+        """
+        q = query.lower()
+        matched: List[Document] = []
+        for doc in documents:
+            fname = (doc.file_name or "").lower()
+            dtype = (doc.document_type or "").lower()
+            stem = fname.rsplit(".", 1)[0].replace("_", " ").replace("-", " ")
+            stripped_stem = re.sub(r"^\d+\s*", "", stem).strip()
+
+            is_match = False
+            # Check exact stem or stripped filename mention
+            if (stem and stem in q) or (stripped_stem and len(stripped_stem) >= 4 and stripped_stem in q):
+                is_match = True
+            elif any(
+                phrase in fname.replace("_", " ") or phrase in dtype
+                for phrase in [
+                    "allotment", "builder buyer", "bba", "sale agreement", "agreement for sale",
+                    "brochure", "marketing", "payment schedule", "payment plan", "villa agreement",
+                    "conveyance", "lease agreement", "sanction"
+                ]
+                if phrase in q
+            ):
+                is_match = True
+            elif "allotment" in q and ("allotment" in fname or "allotment" in dtype):
+                is_match = True
+            elif ("bba" in q or "builder buyer" in q or "builder-buyer" in q) and ("bba" in fname or "builder" in fname or "buyer" in fname or "bba" in dtype):
+                is_match = True
+            elif ("sale agreement" in q or "agreement for sale" in q or "agreement" in q and "agreement" in fname) and ("sale_agreement" in fname or "sale agreement" in fname or "sale" in dtype or "agreement" in fname):
+                is_match = True
+            elif ("brochure" in q or "marketing" in q) and ("brochure" in fname or "marketing" in fname or "brochure" in dtype or "marketing" in dtype):
+                is_match = True
+            elif ("payment schedule" in q or "payment plan" in q) and ("payment" in fname or "payment" in dtype):
+                is_match = True
+
+            if is_match and doc not in matched:
+                matched.append(doc)
+
+        return matched
+
     async def query_transaction(
         self,
         db: AsyncSession,
@@ -161,7 +204,7 @@ class TransactionRAGService:
         """
         Executes grounded transaction question answering.
         Combines 384-d FastEmbed semantic search, lexical matching, anti-hallucination refusal,
-        and citation chip construction.
+        document-scoped query routing, and citation chip construction.
         """
         clean_query = query_text.strip()
         if len(clean_query) < 2:
@@ -175,7 +218,13 @@ class TransactionRAGService:
                 bundleId=bundle_id,
             )
 
-        # 1. Fetch chunks for bundle
+        # 1. Fetch all documents for this bundle to enable scoped routing and citations
+        docs_stmt = select(Document).where(Document.bundle_id == bundle_id)
+        docs_res = await db.execute(docs_stmt)
+        all_docs = docs_res.scalars().all()
+        docs_by_id = {d.id: d for d in all_docs}
+
+        # 2. Fetch chunks for bundle
         stmt = select(DocumentChunk).where(DocumentChunk.bundle_id == bundle_id)
         res = await db.execute(stmt)
         chunks = res.scalars().all()
@@ -197,38 +246,79 @@ class TransactionRAGService:
                 bundleId=bundle_id,
             )
 
-        # 2. Hybrid Retrieval
-        ranked_results: List[RankedChunkResult] = self.retriever.retrieve(
-            query=clean_query,
-            chunks=list(chunks),
-            top_k=top_k,
-        )
+        # 3. Detect Document Scope from Query
+        target_docs = self._identify_target_documents(clean_query, all_docs)
+
+        if len(target_docs) == 1:
+            # Single document scope specified (e.g. "What is the possession date in the Allotment Letter?")
+            target_doc_id = target_docs[0].id
+            scoped_chunks = [c for c in chunks if c.document_id == target_doc_id]
+            if scoped_chunks:
+                ranked_results = self.retriever.retrieve(
+                    query=clean_query,
+                    chunks=scoped_chunks,
+                    top_k=top_k,
+                )
+            else:
+                ranked_results = self.retriever.retrieve(
+                    query=clean_query,
+                    chunks=list(chunks),
+                    top_k=top_k,
+                )
+        elif len(target_docs) > 1:
+            # Multi-document scope specified (e.g. "What are the possession dates in the BBA and Allotment Letter?")
+            ranked_results = []
+            for t_doc in target_docs:
+                doc_chunks = [c for c in chunks if c.document_id == t_doc.id]
+                if doc_chunks:
+                    doc_ranked = self.retriever.retrieve(
+                        query=clean_query,
+                        chunks=doc_chunks,
+                        top_k=max(2, top_k // len(target_docs)),
+                    )
+                    ranked_results.extend(doc_ranked)
+        else:
+            # General query across entire bundle
+            # If asking about possession across the transaction, prioritize chunks mentioning handover/possession
+            is_possession_query = any(k in clean_query.lower() for k in ["possession", "handover", "completion date"])
+            if is_possession_query:
+                possession_chunks = [c for c in chunks if any(k in c.chunk_text.lower() for k in ["possession", "handover", "completion"])]
+                if len(possession_chunks) > 0:
+                    ranked_results = self.retriever.retrieve(
+                        query=clean_query,
+                        chunks=possession_chunks,
+                        top_k=top_k,
+                    )
+                else:
+                    ranked_results = self.retriever.retrieve(
+                        query=clean_query,
+                        chunks=list(chunks),
+                        top_k=top_k,
+                    )
+            else:
+                ranked_results = self.retriever.retrieve(
+                    query=clean_query,
+                    chunks=list(chunks),
+                    top_k=top_k,
+                )
 
         if not ranked_results:
             return self._refusal_response(clean_query, bundle_id)
 
         top_match = ranked_results[0]
 
-        # 3. Grounding & Anti-Hallucination Guardrail
-        # Check if the query is relevant to any retrieved chunk
+        # 4. Grounding & Anti-Hallucination Guardrail
         is_grounded = self._verify_grounding(clean_query, ranked_results)
         if not is_grounded:
             return self._refusal_response(clean_query, bundle_id)
 
-        # Fetch document metadata for citation assembly
-        doc_ids = {r.chunk.document_id for r in ranked_results}
-        docs_stmt = select(Document).where(Document.id.in_(doc_ids))
-        docs_res = await db.execute(docs_stmt)
-        docs_by_id = {d.id: d for d in docs_res.scalars().all()}
-
-        # 4. Construct Citations
+        # 5. Construct Citations
         citations: List[EvidenceCitationSchema] = []
         for r in ranked_results:
             doc = docs_by_id.get(r.chunk.document_id)
             doc_name = doc.file_name if doc else "Document"
             doc_type = doc.document_type if doc else "UNKNOWN"
 
-            # Create concise excerpt from chunk text
             excerpt = self._extract_excerpt(r.chunk.chunk_text, clean_query)
 
             citations.append(
@@ -244,7 +334,7 @@ class TransactionRAGService:
                 )
             )
 
-        # 5. Synthesize Grounded Answer
+        # 6. Synthesize Grounded Answer
         answer_text = self._synthesize_grounded_answer(clean_query, ranked_results, docs_by_id)
 
         return RAGQueryResponseSchema(
@@ -257,25 +347,54 @@ class TransactionRAGService:
             bundleId=bundle_id,
         )
 
+    GENERIC_CONTAINER_TERMS = {
+        "what", "is", "the", "are", "in", "of", "for", "to", "and", "a", "an", "on", "by", "at",
+        "which", "with", "this", "that", "from", "as", "it", "any", "all", "or", "how", "much",
+        "apartment", "flat", "unit", "villa", "property", "project", "building", "complex",
+        "agreement", "document", "contract", "clause", "schedule", "letter", "brochure",
+        "tell", "me", "about", "state", "mention", "give", "show", "details", "there"
+    }
+
     def _verify_grounding(self, query: str, ranked: List[RankedChunkResult]) -> bool:
         """
         Anti-hallucination guardrail:
         Strictly verify whether the retrieved chunks actually ground the query topic.
-        If top match has low cosine similarity and zero or negligible lexical overlap, reject.
+        If top match has low cosine similarity and zero substantive lexical overlap on topic terms, reject.
         """
+        if not ranked:
+            return False
+
         top = ranked[0]
 
-        # 1. Lexical keywords present + reasonable dense support
-        if top.lexical_score > 0 and top.dense_score >= 0.25:
+        # 1. High semantic similarity always passes (strong paraphrases)
+        if top.dense_score >= 0.50:
             return True
 
-        # 2. Strong semantic similarity (paraphrased queries without exact keyword overlap)
-        if top.dense_score >= 0.45:
-            return True
+        # 2. Extract substantive query topic terms (excluding generic containers and stopwords)
+        q_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", query.lower()))
+        topic_words = {w for w in q_words if w not in self.GENERIC_CONTAINER_TERMS}
 
-        # 3. Direct legal identifier match (e.g. "Clause 8.2")
-        if top.lexical_score >= 2.0:
-            return True
+        # Check if any substantive topic word is in the retrieved top chunks (using word boundaries)
+        combined_text = " ".join([r.chunk.chunk_text.lower() for r in ranked[:3]])
+        has_substantive_overlap = (
+            any(re.search(r"\b" + re.escape(tw) + r"\b", combined_text) for tw in topic_words)
+            if topic_words
+            else False
+        )
+
+        if has_substantive_overlap:
+            # Substantive topic word present + solid dense semantic corroboration
+            if top.dense_score >= 0.33 and top.lexical_score >= 0.8:
+                return True
+            if top.dense_score >= 0.42:
+                return True
+
+        # 3. Direct clause reference match (e.g., "Clause 8.2" or "Clause 3")
+        clause_match = re.search(r"clause\s*(\d+(?:\.\d+)?)", query, re.IGNORECASE)
+        if clause_match:
+            cl_num = clause_match.group(1)
+            if any(cl_num in (r.chunk.clause_number or "") for r in ranked[:3]):
+                return True
 
         return False
 
@@ -283,7 +402,6 @@ class TransactionRAGService:
         """
         Returns a strict anti-hallucination refusal response.
         """
-        # Extract subject from query
         subject = query.strip("?. ")
         refusal_msg = (
             f"Based on the uploaded documents in this transaction bundle, there is no verified mention "
@@ -333,7 +451,59 @@ class TransactionRAGService:
         """
         Synthesizes a grounded, deterministic answer citing specific clauses, numbers,
         dates, percentages, and terms directly from retrieved context chunks.
+        Preserves date precision honestly (never invents missing day/month precision).
         """
+        from app.intelligence.entity_normalizer import DateNormalizer
+
+        doc_ids_represented = list(dict.fromkeys([r.chunk.document_id for r in ranked]))
+        is_multi_doc = len(doc_ids_represented) > 1
+
+        q_lower = query.lower()
+        is_possession = any(k in q_lower for k in ["possession", "handover", "delivery", "completion"])
+        is_area = any(k in q_lower for k in ["carpet area", "super area", "area of the apartment", "unit area", "sq.ft", "sqft"])
+
+        # Handle multi-document comparative questions
+        if is_multi_doc and (is_possession or is_area or len(doc_ids_represented) >= 2):
+            answer_parts = ["### Cross-Document Verification\n"]
+            doc_summaries = []
+            extracted_facts = {}
+
+            for doc_id in doc_ids_represented[:3]:
+                doc = docs_by_id.get(doc_id)
+                doc_name = doc.file_name if doc else "Document"
+                doc_chunk = next(r.chunk for r in ranked if r.chunk.document_id == doc_id)
+                clause_ref = f"{doc_chunk.clause_number}: {doc_chunk.clause_title}" if doc_chunk.clause_number else f"Page {doc_chunk.page_number}"
+                excerpt = self._extract_excerpt(doc_chunk.chunk_text, query)
+
+                fact_note = ""
+                if is_possession:
+                    norm_res = DateNormalizer.normalize_with_precision(doc_chunk.chunk_text)
+                    if norm_res:
+                        norm_val, prec = norm_res
+                        if prec == "YEAR":
+                            fact_note = f" (Target Year: **{norm_val}**; exact date not specified)"
+                        elif prec == "MONTH":
+                            fact_note = f" (Projected: **{norm_val}**)"
+                        else:
+                            fact_note = f" (Committed Date: **{norm_val}**)"
+                        extracted_facts[doc_name] = (norm_val, prec)
+
+                doc_summaries.append(
+                    f"• **{doc_name}** ({clause_ref}){fact_note}:\n  > \"{excerpt}\""
+                )
+
+            answer_parts.extend(doc_summaries)
+
+            if is_possession and len(extracted_facts) >= 2:
+                values = list(extracted_facts.values())
+                if any(v[0] != values[0][0] for v in values):
+                    answer_parts.append(
+                        "\n⚠️ **Discrepancy Note**: The formal agreement handover date shifts from the preliminary allotment/brochure timeline."
+                    )
+
+            return "\n\n".join(answer_parts)
+
+        # Single document grounded synthesis
         top_match = ranked[0]
         top_chunk = top_match.chunk
         doc = docs_by_id.get(top_chunk.document_id)
@@ -341,28 +511,37 @@ class TransactionRAGService:
 
         clause_ref = f"{top_chunk.clause_number}: {top_chunk.clause_title}" if top_chunk.clause_number else f"Page {top_chunk.page_number}"
 
-        # Clean chunk text lines
         lines = [l.strip() for l in top_chunk.chunk_text.split("\n") if l.strip()]
         relevant_body = " ".join(lines[1:]) if len(lines) > 1 else (lines[0] if lines else "")
 
-        # Look for key figures (percentages, amounts, dates, durations)
-        key_figures = re.findall(r"(\d+(?:\.\d+)?%|\b(?:rs\.?|inr)\s*[\d,]+|\b\d+\s*(?:days|months|years|sq\.?\s*ft|sqft)\b)", relevant_body, re.IGNORECASE)
+        key_figures = re.findall(
+            r"(\d+(?:\.\d+)?%|\b(?:rs\.?|inr|₹)\s*[\d,]+|\b\d+\s*(?:days|months|years|sq\.?\s*ft|sqft)\b)",
+            relevant_body,
+            re.IGNORECASE,
+        )
 
         answer_parts = []
         answer_parts.append(f"According to **{clause_ref}** of **{doc_label}** (Page {top_chunk.page_number}):")
 
-        # Include direct text summary
-        # If relevant body is concise, present it directly; if long, present the leading sentences
         sentences = re.split(r"(?<=[.!?])\s+", relevant_body)
         summary_sentence = " ".join(sentences[:3]) if sentences else relevant_body
         answer_parts.append(f"> \"{summary_sentence}\"")
 
-        if key_figures:
+        if is_possession:
+            norm_res = DateNormalizer.normalize_with_precision(top_chunk.chunk_text)
+            if norm_res:
+                norm_val, prec = norm_res
+                if prec == "YEAR":
+                    answer_parts.append(f"\n**Target Handover Stated**: {norm_val} (Year precision; exact date is not specified in this document).")
+                elif prec == "MONTH":
+                    answer_parts.append(f"\n**Target Handover Stated**: {norm_val} (Month precision).")
+                else:
+                    answer_parts.append(f"\n**Contractual Handover Date**: {norm_val}.")
+        elif key_figures:
             unique_figures = list(dict.fromkeys([f.strip() for f in key_figures]))[:4]
             answer_parts.append(f"\n**Key Terms Stated:** {', '.join(unique_figures)}.")
 
-        # If a secondary highly relevant chunk exists, mention it
-        if len(ranked) > 1 and ranked[1].combined_confidence >= 0.35:
+        if len(ranked) > 1 and ranked[1].combined_confidence >= 0.35 and ranked[1].chunk.document_id != top_chunk.document_id:
             second_chunk = ranked[1].chunk
             sec_doc = docs_by_id.get(second_chunk.document_id)
             sec_doc_label = sec_doc.file_name if sec_doc else "related document"
@@ -370,3 +549,4 @@ class TransactionRAGService:
             answer_parts.append(f"\nAdditionally, **{sec_ref}** in **{sec_doc_label}** specifies related provisions.")
 
         return "\n\n".join(answer_parts)
+

@@ -1,6 +1,7 @@
 from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime
 import uuid
+import re
 
 from app.models.document import Document
 from app.models.attribute import ExtractedAttribute
@@ -131,7 +132,19 @@ class PossessionDiscrepancyEvaluator(BaseDiscrepancyEvaluator):
                 d1_str = p1.normalized_value
                 d2_str = p2.normalized_value
 
+                p1_prec = p1.unit.replace("date:", "") if (p1.unit and p1.unit.startswith("date:")) else ("YEAR" if len(d1_str) == 4 else "DAY")
+                p2_prec = p2.unit.replace("date:", "") if (p2.unit and p2.unit.startswith("date:")) else ("YEAR" if len(d2_str) == 4 else "DAY")
+
+                is_conflict = False
                 if d1_str and d2_str and d1_str != d2_str:
+                    if p1_prec == "YEAR" or p2_prec == "YEAR":
+                        # Conflicting only if the years themselves differ (e.g. 2026 vs 2027)
+                        if d1_str[:4] != d2_str[:4]:
+                            is_conflict = True
+                    else:
+                        is_conflict = True
+
+                if is_conflict:
                     doc1 = doc_map.get(p1.document_id)
                     doc2 = doc_map.get(p2.document_id)
 
@@ -272,7 +285,9 @@ class UnitDiscrepancyEvaluator(BaseDiscrepancyEvaluator):
                     continue
 
                 if u1.normalized_value and u2.normalized_value:
-                    if u1.normalized_value != u2.normalized_value:
+                    clean1 = re.sub(r"[^A-Za-z0-9]", "", u1.normalized_value).upper()
+                    clean2 = re.sub(r"[^A-Za-z0-9]", "", u2.normalized_value).upper()
+                    if clean1 and clean2 and clean1 != clean2:
                         doc1 = doc_map.get(u1.document_id)
                         doc2 = doc_map.get(u2.document_id)
                         paired = evidence_pairing_service.pair_discrepancy_evidence(

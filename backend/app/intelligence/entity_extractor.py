@@ -22,6 +22,7 @@ class ExtractedEntity:
     source_clause: Optional[str]
     raw_excerpt: str
     confidence: float = 1.0
+    precision: Optional[str] = None
 
 
 class TransactionEntityExtractor:
@@ -32,18 +33,41 @@ class TransactionEntityExtractor:
 
     # --- Property Patterns ---
     CARPET_AREA_PATTERNS = [
-        re.compile(r"(?:rera\s+)?carpet\s+area\s+(?:of\s+|is\s+|:\s*)?([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sq\.?\s*m\.?|square\s+feet))", re.IGNORECASE),
-        re.compile(r"([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sq\.?\s*m\.?))\s*(?:rera\s+)?carpet\s+area", re.IGNORECASE),
+        re.compile(
+            r"(?:(?:contractual|allotted|allotment|marketing|promotional|rera|registered|net)?\s*)*"
+            r"(?:carpet\s+area|apartment\s+carpet\s+area|unit\s+area|total\s+area\s+of\s+the\s+apartment|area\s+of\s+the\s+apartment|area\s+of\s+the\s+unit)"
+            r"(?:\s+of\s+(?:the\s+)?(?:unit|apartment|flat|property))?"
+            r"(?:\s+(?:admeasuring|measuring))?"
+            r"\s*[:\-–=]?\s*"
+            r"(?:of\s+|is\s+|advertises\s+a\s+carpet\s+area\s+of\s+)?"
+            r"([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?|square\s+feet|square\s+met(?:er|re)s?))",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?))\s*(?:of\s+)?(?:contractual|allotted|marketing|promotional|rera)?\s*carpet\s+area",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"advertises\s+a\s+carpet\s+area\s+of\s+([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?|square\s+feet))",
+            re.IGNORECASE,
+        ),
     ]
 
     SUPER_AREA_PATTERNS = [
-        re.compile(r"super\s+(?:built-?up\s+)?area\s+(?:of\s+|is\s+|:\s*)?([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sq\.?\s*m\.?|square\s+feet))", re.IGNORECASE),
-        re.compile(r"([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sq\.?\s*m\.?))\s*(?:of\s+)?super\s+(?:built-?up\s+)?area", re.IGNORECASE),
+        re.compile(r"(?:super\s+(?:built-?up\s+)?area|built-?up\s+area)\s*[:\-–]?\s*(?:of\s+|is\s+)?([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?|square\s+feet))", re.IGNORECASE),
+        re.compile(r"([0-9,]+(?:\.[0-9]+)?\s*(?:sq\.?\s*ft\.?|sqft|sft|sq\.?\s*m\.?))\s*(?:of\s+)?super\s+(?:built-?up\s+)?area", re.IGNORECASE),
     ]
 
     UNIT_PATTERNS = [
-        re.compile(r"(?:unit|apartment|flat)\s+(?:no\.?|number)?\s*[:\-–]?\s*([A-Za-z0-9\-]+)", re.IGNORECASE),
+        re.compile(r"\b(?:unit|apartment|flat|villa)\s+(?:no\.?|number)?\s*[:\-–]?\s*([A-Za-z]?\s*[\-–]?\s*\d+[A-Za-z0-9\-]*)", re.IGNORECASE),
+        re.compile(r"\b(?:unit|apartment|flat)\s+([A-Z]\s*[\-–]\s*\d+)\b", re.IGNORECASE),
     ]
+
+    UNIT_EXCLUDE_WORDS = {
+        "substantially", "subject", "plans", "specifications", "agreement", "documents",
+        "contract", "schedule", "terms", "conditions", "carpet", "marketed", "residential",
+        "commercial", "applicable", "approved", "statutory", "provisions", "details"
+    }
 
     TOWER_PATTERNS = [
         re.compile(r"(?:tower|block|wing)\s+[:\-–]?\s*([A-Za-z0-9\-]+)", re.IGNORECASE),
@@ -51,12 +75,13 @@ class TransactionEntityExtractor:
 
     # --- Financial Patterns ---
     TOTAL_CONSIDERATION_PATTERNS = [
-        re.compile(r"(?:total\s+consideration|total\s+sale\s+price|agreed\s+consideration|total\s+price)\s+(?:of\s+|is\s+|:\s*)?([₹\w\.\s,]+?(?:\/-|\.|\n|$))", re.IGNORECASE),
-        re.compile(r"total\s+consideration\s+of\s+([₹\w\.\s,]+)", re.IGNORECASE),
+        re.compile(r"(?:total\s+(?:agreed\s+|sale\s+|transaction\s+)?consideration|sale\s+consideration|recorded\s+total\s+consideration|agreed\s+consideration|total\s+(?:sale\s+)?price)\s*[:\-–]?\s*(?:of\s+|is\s+)?([₹|I|Rs\.?|INR]?\s*[0-9,]+(?:\.[0-9]+)?(?:\s*(?:crores?|cr|lakhs?|lacs?))?)", re.IGNORECASE),
+        re.compile(r"(?:marketed\s+at|price\s*[:\-–])\s*([₹|I|Rs\.?|INR]?\s*[0-9,]+(?:\.[0-9]+)?(?:\s*(?:crores?|cr|lakhs?|lacs?))?)", re.IGNORECASE),
+        re.compile(r"total\s+consideration\s+of\s+([₹|I|Rs\.?|INR\w\.\s,]+)", re.IGNORECASE),
     ]
 
     BOOKING_AMOUNT_PATTERNS = [
-        re.compile(r"(?:booking\s+amount|earnest\s+money|advance\s+amount)\s+(?:of\s+|is\s+|:\s*)?([₹\w\.\s,]+?(?:\/-|\.|\n|$))", re.IGNORECASE),
+        re.compile(r"(?:booking\s+amount|earnest\s+money|advance\s+amount|booking\s+and\s+initial\s+advance)\s*[:\-–]?\s*(?:of\s+|is\s+)?([₹|I|Rs\.?|INR]?\s*[0-9,]+(?:\.[0-9]+)?(?:\s*(?:crores?|cr|lakhs?|lacs?))?)", re.IGNORECASE),
     ]
 
     DELAY_INTEREST_PATTERNS = [
@@ -67,11 +92,21 @@ class TransactionEntityExtractor:
     # --- Timeline Patterns ---
     POSSESSION_DATE_PATTERNS = [
         re.compile(
-            r"(?:complete\s+construction[^.\n]*?by|possession[^.\n]*?(?:by|on|for|is|date|target)|handover[^.\n]*?(?:by|on|for|is|date|target))\s*[:\-–]?\s*([0-9]{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+,?\s+[0-9]{4}|[0-9]{1,2}[\/\-][0-9]{1,2}[\/\-][0-9]{4}|[0-9]{4}[\/\-][0-9]{1,2}[\/\-][0-9]{1,2})",
+            r"(?:complete\s+construction[^.\n]*?\bby\b|"
+            r"(?:expected\s+|scheduled\s+|promised\s+|contractual\s+|target\s+)?(?:possession|handover|delivery|completion)(?:\s+date)?|"
+            r"date\s+of\s+(?:handing\s+over|possession|handover|delivery))"
+            r"[^.\n]*?"
+            r"(?:\b(?:on\s+or\s+before|by|on|for|is|of|records\s+an\s+expected\s+possession\s+date\s+of)\b)?"
+            r"\s*[:\-–]?\s*"
+            r"([0-9]{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+,?\s+[0-9]{4}|[0-9]{1,2}[\/\-][0-9]{1,2}[\/\-][0-9]{4}|[0-9]{4}[\/\-][0-9]{1,2}[\/\-][0-9]{1,2}|[A-Za-z]+\s+[0-9]{4})",
             re.IGNORECASE,
         ),
         re.compile(
-            r"(?:possession\s+date|handover\s+date|completion\s+date)\s*[:\-–]?\s*([0-9]{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+,?\s+[0-9]{4}|[0-9]{1,2}[\/\-][0-9]{1,2}[\/\-][0-9]{4}|[0-9]{4}[\/\-][0-9]{1,2}[\/\-][0-9]{1,2})",
+            r"(?:possession\s+date|handover\s+date|completion\s+date|handover\s+on\s+or\s+before)\s*[:\-–]?\s*([0-9]{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+,?\s+[0-9]{4}|[0-9]{1,2}[\/\-][0-9]{1,2}[\/\-][0-9]{4}|[0-9]{4}[\/\-][0-9]{1,2}[\/\-][0-9]{1,2}|[A-Za-z]+\s+[0-9]{4})",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"(?:target\s+([0-9]{4})\s+handover|handover\s+(?:in|by|target)\s+([0-9]{4})|possession\s+(?:in|by|target)\s+([0-9]{4})|target\s+handover[^.\n]*?([0-9]{4}))",
             re.IGNORECASE,
         ),
     ]
@@ -215,19 +250,23 @@ class TransactionEntityExtractor:
         # Possession Date
         for pat in self.POSSESSION_DATE_PATTERNS:
             for m in pat.finditer(text):
-                raw_val = m.group(1).strip()
-                norm = DateNormalizer.normalize(raw_val)
-                if norm:
+                raw_val = next((g for g in m.groups() if g is not None), "").strip()
+                if not raw_val:
+                    continue
+                norm_res = DateNormalizer.normalize_with_precision(raw_val)
+                if norm_res:
+                    norm_val, precision = norm_res
                     found.append(
                         ExtractedEntity(
                             attribute_key="possession_date",
                             attribute_value=raw_val,
-                            normalized_value=norm,
-                            unit="date",
+                            normalized_value=norm_val,
+                            unit=f"date:{precision}",
                             source_page=page_number,
                             source_clause=clause_number,
                             raw_excerpt=self._get_context_window(text, m.start(), m.end()),
                             confidence=0.93 if clause_number else 0.85,
+                            precision=precision,
                         )
                     )
 
@@ -272,13 +311,21 @@ class TransactionEntityExtractor:
         # Unit Number
         for pat in self.UNIT_PATTERNS:
             for m in pat.finditer(text):
-                raw_val = m.group(1).strip()
-                if len(raw_val) >= 2 and not raw_val.lower().startswith("of"):
+                raw_val = next((g for g in m.groups() if g is not None), "").strip()
+                clean_unit = re.sub(r"^(?:unit|apartment|flat|villa|no\.?|number)\s*", "", raw_val, flags=re.IGNORECASE).strip()
+                clean_unit = re.sub(r"\s*[\-–]\s*", "-", clean_unit)
+                words = clean_unit.lower().split()
+                if any(w in self.UNIT_EXCLUDE_WORDS for w in words):
+                    continue
+                # Must contain at least one digit to be a genuine apartment/unit identifier
+                if not re.search(r"\d", clean_unit):
+                    continue
+                if len(clean_unit) >= 2:
                     found.append(
                         ExtractedEntity(
                             attribute_key="unit_number",
                             attribute_value=raw_val,
-                            normalized_value=raw_val.upper(),
+                            normalized_value=clean_unit.upper(),
                             unit="",
                             source_page=page_number,
                             source_clause=clause_number,
