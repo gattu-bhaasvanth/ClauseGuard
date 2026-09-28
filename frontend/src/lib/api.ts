@@ -9,18 +9,31 @@ const API_BASE =
 
 /**
  * Fetch all transaction bundles from FastAPI backend,
- * falling back to local mock data if the backend is not reachable.
+ * optionally filtered by search query (project, developer, unit, title).
+ * Falls back to local mock data if the backend is not reachable.
  */
-export async function fetchTransactions(): Promise<any[]> {
+export async function fetchTransactions(query?: string): Promise<any[]> {
   try {
-    const res = await fetch(`${API_BASE}/transactions`, {
+    const url = query && query.trim()
+      ? `${API_BASE}/transactions?q=${encodeURIComponent(query.trim())}`
+      : `${API_BASE}/transactions`;
+    const res = await fetch(url, {
       headers: { Accept: "application/json" },
       cache: "no-store",
     });
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     return await res.json();
   } catch (err) {
-    return MOCK_ALL_TRANSACTIONS;
+    if (!query || !query.trim()) return MOCK_ALL_TRANSACTIONS;
+    const q = query.trim().toLowerCase();
+    return MOCK_ALL_TRANSACTIONS.filter(
+      (t) =>
+        t.title?.toLowerCase().includes(q) ||
+        t.property?.project?.toLowerCase().includes(q) ||
+        t.property?.developer?.toLowerCase().includes(q) ||
+        t.property?.unit?.toLowerCase().includes(q) ||
+        t.property?.location?.toLowerCase().includes(q)
+    );
   }
 }
 

@@ -2,7 +2,7 @@ from typing import List, Optional
 from datetime import datetime
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 from app.models.transaction import TransactionBundle
 from app.models.document import Document
@@ -222,12 +222,28 @@ def map_bundle_to_detail(bundle: TransactionBundle) -> TransactionDetailSchema:
     )
 
 
-async def get_all_transactions(session: AsyncSession) -> List[TransactionListItemSchema]:
-    result = await session.execute(
+async def get_all_transactions(
+    session: AsyncSession, query: Optional[str] = None
+) -> List[TransactionListItemSchema]:
+    stmt = (
         select(TransactionBundle)
         .options(selectinload(TransactionBundle.documents), selectinload(TransactionBundle.findings))
         .order_by(TransactionBundle.created_at.desc())
     )
+    if query and query.strip():
+        q_clean = query.strip()
+        q_pattern = f"%{q_clean}%"
+        stmt = stmt.filter(
+            or_(
+                TransactionBundle.title.ilike(q_pattern),
+                TransactionBundle.project.ilike(q_pattern),
+                TransactionBundle.developer.ilike(q_pattern),
+                TransactionBundle.unit.ilike(q_pattern),
+                TransactionBundle.location.ilike(q_pattern),
+                TransactionBundle.city.ilike(q_pattern),
+            )
+        )
+    result = await session.execute(stmt)
     bundles = result.scalars().all()
     return [map_bundle_to_list_item(b) for b in bundles]
 

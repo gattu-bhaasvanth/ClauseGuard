@@ -1,5 +1,5 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.schemas.transaction import (
@@ -32,9 +32,12 @@ router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
 
 @router.get("", response_model=List[TransactionListItemSchema])
-async def list_transactions(db: AsyncSession = Depends(get_db)):
-    """List all active property transaction bundles."""
-    return await transaction_service.get_all_transactions(db)
+async def list_transactions(
+    q: Optional[str] = Query(None, description="Search term for project, developer, unit, or location"),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all active property transaction bundles, optionally filtered by search term."""
+    return await transaction_service.get_all_transactions(db, query=q)
 
 
 @router.post("", response_model=TransactionDetailSchema, status_code=status.HTTP_201_CREATED)

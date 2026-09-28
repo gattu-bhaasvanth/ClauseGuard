@@ -46,7 +46,17 @@ export function RecentTransactionsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-surface-border/60 text-zinc-300">
-            {transactions.map((tx) => (
+            {transactions.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="py-12 text-center text-zinc-500">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <p className="text-sm font-medium text-zinc-400">No property transactions found</p>
+                    <p className="text-xs text-zinc-500">No transactions match your search criteria or none have been created yet.</p>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              transactions.map((tx) => (
               <tr
                 key={tx.id}
                 className="hover:bg-surface-hover/60 transition-colors group"
@@ -111,7 +121,8 @@ export function RecentTransactionsTable({
                   </Link>
                 </td>
               </tr>
-            ))}
+            ))
+            )}
           </tbody>
         </table>
       </div>

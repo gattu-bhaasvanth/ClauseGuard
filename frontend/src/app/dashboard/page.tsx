@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Layers,
@@ -19,15 +19,28 @@ import { TransactionHealthScore } from "@/components/dashboard/TransactionHealth
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { SeverityBadge } from "@/components/shared/SeverityBadge";
+import { Transaction } from "@/types/transaction";
+import { fetchTransactions } from "@/lib/api";
 import { MOCK_ALL_TRANSACTIONS, MOCK_SKYVIEW_TRANSACTION } from "@/mock/demoData";
 
 export default function DashboardOverviewPage() {
-  const transactions = MOCK_ALL_TRANSACTIONS;
+  const [transactions, setTransactions] = useState<Transaction[]>(MOCK_ALL_TRANSACTIONS);
+
+  useEffect(() => {
+    fetchTransactions()
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setTransactions(data);
+        }
+      })
+      .catch((err) => console.error("Failed to load transactions for overview:", err));
+  }, []);
+
   const activeCount = transactions.length;
-  const totalDocs = transactions.reduce((acc, t) => acc + t.documentsCount, 0);
-  const totalIssues = transactions.reduce((acc, t) => acc + t.issuesCount, 0);
+  const totalDocs = transactions.reduce((acc, t) => acc + (t.documentsCount || 0), 0);
+  const totalIssues = transactions.reduce((acc, t) => acc + (t.issuesCount || 0), 0);
   const totalObligations = transactions.reduce(
-    (acc, t) => acc + t.paymentObligationsCount,
+    (acc, t) => acc + (t.paymentObligationsCount || 0),
     0
   );
 
