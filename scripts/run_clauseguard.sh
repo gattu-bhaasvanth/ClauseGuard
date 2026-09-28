@@ -59,6 +59,16 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM EXIT
 
+# Terminate any conflicting/stale processes on ports 8000 and 3000
+for port in 8000 3000; do
+    STALE_PIDS=$(lsof -ti :$port 2>/dev/null || true)
+    if [ -n "$STALE_PIDS" ]; then
+        echo "⚠️  Clearing stale process on port $port (PID: $STALE_PIDS)..."
+        kill -9 $STALE_PIDS 2>/dev/null || true
+        sleep 0.5
+    fi
+done
+
 echo "🚀 [1/2] Starting FastAPI Backend on http://127.0.0.1:8000..."
 cd "$BACKEND_DIR"
 "$BACKEND_DIR/.venv/bin/uvicorn" app.main:app --host 127.0.0.1 --port 8000 &

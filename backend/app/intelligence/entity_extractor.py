@@ -191,6 +191,9 @@ class TransactionEntityExtractor:
         # Carpet Area
         for pat in self.CARPET_AREA_PATTERNS:
             for m in pat.finditer(text):
+                prefix = text[max(0, m.start() - 100):m.start()]
+                if DateNormalizer.is_negated_context(prefix):
+                    continue
                 raw_val = m.group(1).strip()
                 norm = AreaNormalizer.normalize(raw_val)
                 if norm:
@@ -210,6 +213,9 @@ class TransactionEntityExtractor:
         # Built-Up Area / Plinth Area
         for pat in self.BUILT_UP_AREA_PATTERNS:
             for m in pat.finditer(text):
+                prefix = text[max(0, m.start() - 100):m.start()]
+                if DateNormalizer.is_negated_context(prefix):
+                    continue
                 raw_val = m.group(1).strip()
                 norm = AreaNormalizer.normalize(raw_val)
                 if norm:
@@ -229,6 +235,9 @@ class TransactionEntityExtractor:
         # Super Area
         for pat in self.SUPER_AREA_PATTERNS:
             for m in pat.finditer(text):
+                prefix = text[max(0, m.start() - 100):m.start()]
+                if DateNormalizer.is_negated_context(prefix):
+                    continue
                 raw_val = m.group(1).strip()
                 norm = AreaNormalizer.normalize(raw_val)
                 if norm:
@@ -248,6 +257,9 @@ class TransactionEntityExtractor:
         # Total Price / Consideration
         for pat in self.TOTAL_CONSIDERATION_PATTERNS:
             for m in pat.finditer(text):
+                prefix = text[max(0, m.start() - 100):m.start()]
+                if DateNormalizer.is_negated_context(prefix):
+                    continue
                 raw_val = m.group(1).strip()
                 norm = CurrencyNormalizer.normalize(raw_val)
                 if norm and norm[0] >= 100_000:  # Real estate prices exceed 1 Lakh
@@ -286,6 +298,9 @@ class TransactionEntityExtractor:
         # Possession Date
         for pat in self.POSSESSION_DATE_PATTERNS:
             for m in pat.finditer(text):
+                prefix = text[max(0, m.start() - 100):m.start()]
+                if DateNormalizer.is_negated_context(prefix):
+                    continue
                 raw_val = next((g for g in m.groups() if g is not None), "").strip()
                 if not raw_val:
                     continue

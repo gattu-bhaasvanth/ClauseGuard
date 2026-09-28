@@ -7,6 +7,7 @@ from app.models.document import Document
 from app.models.attribute import ExtractedAttribute
 from app.models.finding import Finding
 from app.intelligence.evidence_pairing import evidence_pairing_service
+from app.intelligence.entity_normalizer import DateNormalizer
 
 
 class BaseDiscrepancyEvaluator:
@@ -116,6 +117,18 @@ class AreaDiscrepancyEvaluator(BaseDiscrepancyEvaluator):
 class PossessionDiscrepancyEvaluator(BaseDiscrepancyEvaluator):
     """Detects promised possession date shifts and grace period extensions between documents."""
 
+    @staticmethod
+    def _are_dates_conflicting(val1: str, prec1: str, val2: str, prec2: str) -> bool:
+        if not val1 or not val2 or val1 == val2:
+            return False
+        p1 = "DAY" if prec1 in ("DAY", "EXACT_DATE") else ("MONTH" if prec1 in ("MONTH", "MONTH_YEAR") else prec1)
+        p2 = "DAY" if prec2 in ("DAY", "EXACT_DATE") else ("MONTH" if prec2 in ("MONTH", "MONTH_YEAR") else prec2)
+        if p1 == "YEAR" or p2 == "YEAR":
+            return val1[:4] != val2[:4]
+        if p1 == "MONTH" or p2 == "MONTH":
+            return val1[:7] != val2[:7]
+        return val1 != val2
+
     def evaluate(
         self,
         bundle_id: str,
@@ -123,35 +136,63 @@ class PossessionDiscrepancyEvaluator(BaseDiscrepancyEvaluator):
         attributes: List[ExtractedAttribute],
     ) -> List[Finding]:
         doc_map = {d.id: d for d in documents}
-        possession_attrs = [a for a in attributes if a.attribute_key == "possession_date"]
+
+        # 1. Filter out negated or omitted references
+        possession_attrs = [
+            a for a in attributes
+            if a.attribute_key == "possession_date" and not DateNormalizer.is_negated_context(a.raw_excerpt)
+        ]
         if len(possession_attrs) < 2:
             return []
 
+        # Deduplicate per document
+        doc_attrs: Dict[str, ExtractedAttribute] = {}
+        for a in possession_attrs:
+            if a.document_id not in doc_attrs:
+                doc_attrs[a.document_id] = a
+            else:
+                existing = doc_attrs[a.document_id]
+                if (a.source_clause and not existing.source_clause) or (a.confidence > existing.confidence):
+                    doc_attrs[a.document_id] = a
+
         findings: List[Finding] = []
 
-        for i in range(len(possession_attrs)):
-            for j in range(i + 1, len(possession_attrs)):
-                p1 = possession_attrs[i]
-                p2 = possession_attrs[j]
+        # Separate contractual vs marketing
+        contractual_attrs: List[ExtractedAttribute] = []
+        marketing_attrs: List[ExtractedAttribute] = []
+
+        for doc_id, attr in doc_attrs.items():
+            doc = doc_map.get(doc_id)
+            doc_type = (doc.document_type or "").upper() if doc else "DOCUMENT"
+            doc_name = (doc.file_name or "").lower() if doc else ""
+            is_marketing = (
+                "BROCHURE" in doc_type or
+                "brochure" in doc_name or
+                "marketing" in doc_name or
+                "prospectus" in doc_name
+            )
+            if is_marketing:
+                marketing_attrs.append(attr)
+            else:
+                contractual_attrs.append(attr)
+
+        # 1. Contractual vs Contractual Discrepancy (Binding Delivery Shift)
+        found_contractual = False
+        for i in range(len(contractual_attrs)):
+            if found_contractual:
+                break
+            for j in range(i + 1, len(contractual_attrs)):
+                p1 = contractual_attrs[i]
+                p2 = contractual_attrs[j]
                 if p1.document_id == p2.document_id:
                     continue
 
-                d1_str = p1.normalized_value
-                d2_str = p2.normalized_value
+                d1_str = p1.normalized_value or ""
+                d2_str = p2.normalized_value or ""
+                p1_prec = getattr(p1, "precision", None) or (p1.unit.replace("date:", "") if (p1.unit and p1.unit.startswith("date:")) else ("YEAR" if len(d1_str) == 4 else "DAY"))
+                p2_prec = getattr(p2, "precision", None) or (p2.unit.replace("date:", "") if (p2.unit and p2.unit.startswith("date:")) else ("YEAR" if len(d2_str) == 4 else "DAY"))
 
-                p1_prec = p1.unit.replace("date:", "") if (p1.unit and p1.unit.startswith("date:")) else ("YEAR" if len(d1_str) == 4 else "DAY")
-                p2_prec = p2.unit.replace("date:", "") if (p2.unit and p2.unit.startswith("date:")) else ("YEAR" if len(d2_str) == 4 else "DAY")
-
-                is_conflict = False
-                if d1_str and d2_str and d1_str != d2_str:
-                    if p1_prec == "YEAR" or p2_prec == "YEAR":
-                        # Conflicting only if the years themselves differ (e.g. 2026 vs 2027)
-                        if d1_str[:4] != d2_str[:4]:
-                            is_conflict = True
-                    else:
-                        is_conflict = True
-
-                if is_conflict:
+                if self._are_dates_conflicting(d1_str, p1_prec, d2_str, p2_prec):
                     doc1 = doc_map.get(p1.document_id)
                     doc2 = doc_map.get(p2.document_id)
 
@@ -198,7 +239,59 @@ class PossessionDiscrepancyEvaluator(BaseDiscrepancyEvaluator):
                             detected_at=datetime.utcnow(),
                         )
                     )
-                    return findings
+                    found_contractual = True
+                    break
+
+        # 2. Marketing vs Contractual Discrepancy
+        # Only flag if marketing contradicts ALL contractual milestones
+        for m_attr in marketing_attrs:
+            m_val = m_attr.normalized_value or ""
+            m_prec = getattr(m_attr, "precision", None) or (m_attr.unit.replace("date:", "") if (m_attr.unit and m_attr.unit.startswith("date:")) else ("YEAR" if len(m_val) == 4 else "DAY"))
+
+            if contractual_attrs:
+                # Check compatibility with all contractual milestones
+                compatible = any(
+                    not self._are_dates_conflicting(
+                        m_val,
+                        m_prec,
+                        c.normalized_value or "",
+                        getattr(c, "precision", None) or (c.unit.replace("date:", "") if (c.unit and c.unit.startswith("date:")) else "DAY"),
+                    )
+                    for c in contractual_attrs
+                )
+                if not compatible:
+                    # Marketing contradicts all contractual documents (promotional variance)
+                    ref_c = min(contractual_attrs, key=lambda c: c.normalized_value or "9999")
+                    m_doc = doc_map.get(m_attr.document_id)
+                    c_doc = doc_map.get(ref_c.document_id)
+                    m_name = m_doc.file_name if m_doc else "Marketing Document"
+                    c_name = c_doc.file_name if c_doc else "Contractual Document"
+
+                    paired = evidence_pairing_service.pair_discrepancy_evidence(
+                        doc_a=m_doc,
+                        attr_a=m_attr,
+                        doc_b=c_doc,
+                        attr_b=ref_c,
+                    )
+                    findings.append(
+                        Finding(
+                            id=f"inc-possession-mkt-{uuid.uuid4().hex[:6]}",
+                            bundle_id=bundle_id,
+                            finding_type="INCONSISTENCY",
+                            category="POSSESSION",
+                            severity="LOW",
+                            title="Advertised Handover Date Variance",
+                            description=(
+                                f"{m_name} advertised handover by {m_attr.attribute_value} ({m_val}), "
+                                f"whereas {c_name} stipulates completion by {ref_c.attribute_value} ({ref_c.normalized_value})."
+                            ),
+                            impact="Marketing representations reflect earlier completion projections than formal transaction instruments.",
+                            recommendation_note="Verify binding RERA registration timeline against marketing claims.",
+                            primary_evidence=paired["primary_evidence"],
+                            secondary_evidence=paired["secondary_evidence"],
+                            detected_at=datetime.utcnow(),
+                        )
+                    )
 
         return findings
 

@@ -13,6 +13,7 @@ from app.services.transaction_intelligence_orchestrator import (
     transaction_intelligence_orchestrator,
     format_currency_inr,
 )
+from app.intelligence.entity_normalizer import DateNormalizer
 
 
 class TimelineService:
@@ -174,9 +175,11 @@ class TimelineService:
         """
         if not val1 or not val2 or val1 == val2:
             return False
-        if prec1 == "YEAR" or prec2 == "YEAR":
+        p1 = "DAY" if prec1 in ("DAY", "EXACT_DATE") else ("MONTH" if prec1 in ("MONTH", "MONTH_YEAR") else prec1)
+        p2 = "DAY" if prec2 in ("DAY", "EXACT_DATE") else ("MONTH" if prec2 in ("MONTH", "MONTH_YEAR") else prec2)
+        if p1 == "YEAR" or p2 == "YEAR":
             return val1[:4] != val2[:4]
-        if prec1 == "MONTH" or prec2 == "MONTH":
+        if p1 == "MONTH" or p2 == "MONTH":
             return val1[:7] != val2[:7]
         return val1 != val2
 
@@ -191,31 +194,46 @@ class TimelineService:
         events: List[TimelineEventSchema] = []
         doc_map = {d.id: d for d in bundle.documents}
 
-        # 1. Collect all possession dates from extracted attributes
+        # 1. Collect all possession dates from extracted attributes, filtering negated/omitted disclaimers
         possession_attrs = [
-            a for a in bundle.extracted_attributes if a.attribute_key == "possession_date"
+            a for a in bundle.extracted_attributes
+            if a.attribute_key == "possession_date" and not DateNormalizer.is_negated_context(a.raw_excerpt)
         ]
 
-        # Deduplicate possession attributes per document (pick highest confidence & precision)
+        # Deduplicate possession attributes per document
+        # Never overwrite lower precision (e.g. YEAR in brochure) with higher precision from unrelated matches.
         doc_possession: Dict[str, Any] = {}
         for a in possession_attrs:
             if a.document_id not in doc_possession:
                 doc_possession[a.document_id] = a
             else:
                 existing = doc_possession[a.document_id]
-                a_prec = "YEAR" if len(a.normalized_value or "") == 4 else "DAY"
-                ex_prec = "YEAR" if len(existing.normalized_value or "") == 4 else "DAY"
-                if (a_prec == "DAY" and ex_prec != "DAY") or a.confidence > existing.confidence:
+                # If existing is from a clause and new is not, keep existing
+                # Otherwise if new has higher confidence or clause reference, update
+                if (a.source_clause and not existing.source_clause) or (a.confidence > existing.confidence):
                     doc_possession[a.document_id] = a
 
-        # Precompute precision for each document's possession attribute
+        # Precompute info for each document's possession attribute
         doc_info: Dict[str, Dict[str, Any]] = {}
         for doc_id, attr in doc_possession.items():
             doc = doc_map.get(doc_id)
             doc_name = doc.file_name if doc else "Document"
             doc_type = (doc.document_type or "").upper() if doc else "DOCUMENT"
             val = attr.normalized_value or ""
-            prec = attr.unit.replace("date:", "") if (attr.unit and attr.unit.startswith("date:")) else ("YEAR" if len(val) == 4 else ("MONTH" if len(val) == 7 else "DAY"))
+            prec = getattr(attr, "precision", None) or (attr.unit.replace("date:", "") if (attr.unit and attr.unit.startswith("date:")) else ("YEAR" if len(val) == 4 else ("MONTH" if len(val) == 7 else "DAY")))
+
+            is_marketing = (
+                "BROCHURE" in doc_type or
+                "brochure" in doc_name.lower() or
+                "marketing" in doc_name.lower() or
+                "prospectus" in doc_name.lower()
+            )
+            is_allotment = (
+                "ALLOTMENT" in doc_type or
+                "allotment" in doc_name.lower() or
+                "booking" in doc_name.lower()
+            )
+
             doc_info[doc_id] = {
                 "attr": attr,
                 "doc": doc,
@@ -223,6 +241,9 @@ class TimelineService:
                 "doc_type": doc_type,
                 "val": val,
                 "prec": prec,
+                "is_marketing": is_marketing,
+                "is_allotment": is_allotment,
+                "is_contractual": not is_marketing,
             }
 
         # Precision-aware cross-document conflict evaluation
@@ -230,15 +251,18 @@ class TimelineService:
         conflicts_by_doc: Dict[str, tuple[str, str]] = {}
 
         doc_ids = list(doc_info.keys())
-        for i in range(len(doc_ids)):
-            id_i = doc_ids[i]
+        contractual_ids = [d for d in doc_ids if doc_info[d]["is_contractual"]]
+        marketing_ids = [d for d in doc_ids if doc_info[d]["is_marketing"]]
+
+        # Phase A: Contractual vs Contractual conflict evaluation (Binding Legal Conflicts)
+        for i in range(len(contractual_ids)):
+            id_i = contractual_ids[i]
             info_i = doc_info[id_i]
-            for j in range(i + 1, len(doc_ids)):
-                id_j = doc_ids[j]
+            for j in range(i + 1, len(contractual_ids)):
+                id_j = contractual_ids[j]
                 info_j = doc_info[id_j]
 
                 if self._are_dates_conflicting(info_i["val"], info_i["prec"], info_j["val"], info_j["prec"]):
-                    # Calculate difference description if both are DAY precision
                     diff_desc = "discrepancy"
                     if info_i["prec"] == "DAY" and info_j["prec"] == "DAY":
                         try:
@@ -249,6 +273,17 @@ class TimelineService:
                             diff_desc = f"{diff_m}-month delivery disparity" if diff_m > 0 else f"{diff_days}-day disparity"
                         except Exception:
                             pass
+                    elif info_i["prec"] in ("MONTH", "MONTH_YEAR") or info_j["prec"] in ("MONTH", "MONTH_YEAR"):
+                        try:
+                            y1, m1 = int(info_i["val"][:4]), int(info_i["val"][5:7])
+                            y2, m2 = int(info_j["val"][:4]), int(info_j["val"][5:7])
+                            diff_m = abs((y2 - y1) * 12 + (m2 - m1))
+                            diff_desc = f"{diff_m}-month delivery disparity"
+                        except Exception:
+                            pass
+                    else:
+                        y_diff = abs(int(info_i["val"][:4]) - int(info_j["val"][:4]))
+                        diff_desc = f"{y_diff}-year delivery disparity"
 
                     detail_i = f"Differs from {info_j['doc_name']} ({info_j['attr'].attribute_value or info_j['val']}) by {diff_desc}."
                     detail_j = f"Differs from {info_i['doc_name']} ({info_i['attr'].attribute_value or info_i['val']}) by {diff_desc}."
@@ -265,6 +300,56 @@ class TimelineService:
                         info_j["attr"].attribute_value or info_j["val"],
                         diff_desc,
                     ))
+
+        # Phase B: Marketing vs Contractual evaluation
+        # Rule 1: If Marketing is compatible with ANY contractual document (e.g. 2029 brochure matches 2029-11-20 allotment),
+        # Marketing is NOT in conflict! No false marketing conflict.
+        # Rule 2: If Marketing contradicts ALL contractual documents (e.g. 2026 brochure vs 2029 allotment and 2030 agreement),
+        # Marketing is flagged as a promotional variance, but at its own precision (never fabricating an exact day),
+        # and contractual documents maintain their mutual conflict.
+        for m_id in marketing_ids:
+            info_m = doc_info[m_id]
+            if contractual_ids:
+                compatible_contract = next(
+                    (c_id for c_id in contractual_ids
+                     if not self._are_dates_conflicting(info_m["val"], info_m["prec"], doc_info[c_id]["val"], doc_info[c_id]["prec"])),
+                    None,
+                )
+                if compatible_contract:
+                    # Marketing is compatible with contractual milestone (e.g. 2029 brochure aligns with 2029 allotment)
+                    continue
+
+                # Marketing contradicts all contractual documents
+                ref_c_id = min(contractual_ids, key=lambda c: doc_info[c]["val"] or "9999")
+                info_c = doc_info[ref_c_id]
+                y_diff = abs(int(info_c["val"][:4]) - int(info_m["val"][:4]))
+                diff_desc = f"{y_diff}-year promotional variance" if y_diff > 0 else "promotional variance"
+
+                detail_m = f"Advertised target ({info_m['attr'].attribute_value or info_m['val']}) differs from contractual milestone in {info_c['doc_name']} ({info_c['attr'].attribute_value or info_c['val']}) by {diff_desc}."
+                conflicts_by_doc[m_id] = (info_c["val"], detail_m)
+
+                if ref_c_id not in conflicts_by_doc:
+                    detail_c = f"Differs from advertised marketing target in {info_m['doc_name']} ({info_m['attr'].attribute_value or info_m['val']}) by {diff_desc}."
+                    conflicts_by_doc[ref_c_id] = (info_m["val"], detail_c)
+
+                conflict_pairs.append((
+                    info_m["doc_name"],
+                    info_m["attr"].attribute_value or info_m["val"],
+                    info_c["doc_name"],
+                    info_c["attr"].attribute_value or info_c["val"],
+                    diff_desc,
+                ))
+            else:
+                for other_m_id in marketing_ids:
+                    if other_m_id == m_id:
+                        continue
+                    info_other = doc_info[other_m_id]
+                    if self._are_dates_conflicting(info_m["val"], info_m["prec"], info_other["val"], info_other["prec"]):
+                        if m_id not in conflicts_by_doc:
+                            conflicts_by_doc[m_id] = (
+                                info_other["val"],
+                                f"Differs from {info_other['doc_name']} ({info_other['attr'].attribute_value or info_other['val']}).",
+                            )
 
         ev_idx = 1
         possession_events = []

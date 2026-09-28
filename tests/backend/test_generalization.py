@@ -807,3 +807,234 @@ def test_generalized_timeline_precision_provenance_and_conflicts():
     assert summary_b is None, "Single document with year-only date has 0 conflicts"
 
 
+# ==============================================================================
+# 9. MAPLE HEIGHTS TRANSACTION VERIFICATION (Section 14)
+# ==============================================================================
+
+@pytest.mark.asyncio
+async def test_maple_heights_timeline_conflict_engine_and_precision():
+    """
+    Validates Section 14 requirements on Maple Heights Enclave:
+    - Marketing: 2029, exact date unspecified
+    - Allotment: 20 November 2029
+    - Agreement: 28 February 2030
+    - No fabricated marketing exact date
+    - No false marketing conflict (Brochure conflictingDate is None)
+    - Genuine allotment/agreement conflict remains (3-month delivery disparity)
+    - Derived grace period (6 months) is 2030-08-28 with isDerived=True
+    - Super built-up area discrepancy (1145 vs 1080 sq.ft) is correct
+    - Zero data leakage from Harbor Crest, SkyView, or Test Residency
+    """
+    ts = TimelineService()
+
+    doc_broch = Document(id="doc-ddd84514", bundle_id="tx-84ef0c8e", file_name="05_Maple_Heights_Project_Brochure.pdf", document_type="PROJECT_BROCHURE")
+    doc_allot = Document(id="doc-a6beca7d", bundle_id="tx-84ef0c8e", file_name="02_Allotment_Confirmation_Letter.pdf", document_type="ALLOTMENT_LETTER")
+    doc_sale = Document(id="doc-34f5f5b3", bundle_id="tx-84ef0c8e", file_name="03_Agreement_for_Sale_B904.pdf", document_type="SALE_AGREEMENT")
+    doc_book = Document(id="doc-0b29750d", bundle_id="tx-84ef0c8e", file_name="01_Reservation_Booking_Record.pdf", document_type="OTHER")
+    doc_sched = Document(id="doc-153a139a", bundle_id="tx-84ef0c8e", file_name="04_Construction_Payment_Demand_Schedule.pdf", document_type="PAYMENT_SCHEDULE")
+
+    bundle = TransactionBundle(
+        id="tx-84ef0c8e",
+        title="Maple Heights Enclave — Block B, Apartment B-904",
+        project="Maple Heights Enclave",
+        developer="Northstar Habitat Projects Pvt. Ltd.",
+        location="Bengaluru, Karnataka",
+        unit="Block B, Apartment B-904",
+        sale_price=9_240_000.0,
+        possession_date="2030-02-28",
+        grace_period_months=6,
+    )
+    bundle.documents = [doc_book, doc_allot, doc_sale, doc_sched, doc_broch]
+    bundle.extracted_attributes = [
+        # Brochure attributes (including negative mention that MUST be filtered)
+        ExtractedAttribute(id="at-mh-1", bundle_id="tx-84ef0c8e", document_id="doc-ddd84514", attribute_key="possession_date", attribute_value="during 2029", normalized_value="2029", unit="date:YEAR", source_page=1, raw_excerpt="The project is marketed with a target handover during 2029. No exact day or month is specified in this brochure."),
+        ExtractedAttribute(id="at-mh-neg", bundle_id="tx-84ef0c8e", document_id="doc-ddd84514", attribute_key="possession_date", attribute_value="28 February 2030", normalized_value="2030-02-28", unit="date:DAY", source_page=1, raw_excerpt="This brochure does not state the contractual possession date of 28 February 2030 and does not reproduce the detailed payment schedule."),
+        ExtractedAttribute(id="at-mh-2", bundle_id="tx-84ef0c8e", document_id="doc-a6beca7d", attribute_key="possession_date", attribute_value="20 November 2029", normalized_value="2029-11-20", unit="date:DAY", source_page=1, raw_excerpt="The expected possession date recorded in this allotment letter is 20 November 2029."),
+        ExtractedAttribute(id="at-mh-3", bundle_id="tx-84ef0c8e", document_id="doc-34f5f5b3", attribute_key="possession_date", attribute_value="28 February 2030", normalized_value="2030-02-28", unit="date:DAY", source_page=1, raw_excerpt="Subject to the terms of this Agreement and permitted extensions, the Developer shall offer possession on or before 28 February 2030."),
+        ExtractedAttribute(id="at-mh-area1", bundle_id="tx-84ef0c8e", document_id="doc-ddd84514", attribute_key="super_area", attribute_value="1,145 sq.ft.", normalized_value="1145.0", unit="sq.ft", source_page=1),
+        ExtractedAttribute(id="at-mh-area2", bundle_id="tx-84ef0c8e", document_id="doc-0b29750d", attribute_key="super_area", attribute_value="1,080 sq.ft.", normalized_value="1080.0", unit="sq.ft", source_page=1),
+    ]
+
+    events, summary = ts._build_dynamic_timeline_events(bundle, 9_240_000.0)
+
+    # 1. Marketing event verification: Year 2029, YEAR precision, conflictingDate is None
+    ev_mkt = next(e for e in events if e.documentName == "05_Maple_Heights_Project_Brochure.pdf")
+    assert ev_mkt.eventDate == "2029", f"Marketing date must remain 2029, got {ev_mkt.eventDate}"
+    assert ev_mkt.precision == "YEAR", f"Marketing precision must be YEAR, got {ev_mkt.precision}"
+    assert ev_mkt.conflictingDate is None, f"Marketing 2029 is compatible with 2029-11-20 allotment and must NOT conflict, got {ev_mkt.conflictingDate}"
+    assert "exact day not specified" in ev_mkt.description
+    assert ev_mkt.isDerived is False
+
+    # 2. Allotment event verification: 2029-11-20, DAY precision, conflicts with Agreement (2030-02-28)
+    ev_allot = next(e for e in events if e.documentName == "02_Allotment_Confirmation_Letter.pdf")
+    assert ev_allot.eventDate == "2029-11-20"
+    assert ev_allot.precision == "DAY"
+    assert ev_allot.conflictingDate == "2030-02-28"
+    assert "3-month delivery disparity" in (ev_allot.conflictDetails or "")
+
+    # 3. Agreement event verification: 2030-02-28, DAY precision, conflicts with Allotment (2029-11-20)
+    ev_agree = next(e for e in events if e.documentName == "03_Agreement_for_Sale_B904.pdf" and e.dateType == "CONTRACTUAL")
+    assert ev_agree.eventDate == "2030-02-28"
+    assert ev_agree.precision == "DAY"
+    assert ev_agree.conflictingDate == "2029-11-20"
+    assert "3-month delivery disparity" in (ev_agree.conflictDetails or "")
+
+    # 4. Total conflicting events must be exactly 2 (only the contractual documents)
+    conflicting_events = [e for e in events if e.conflictingDate is not None]
+    assert len(conflicting_events) == 2, f"Expected 2 conflicting events, got {len(conflicting_events)}"
+
+    # 5. Summary must describe Allotment vs Agreement and not mention false brochure conflict
+    assert summary is not None
+    assert "02_Allotment_Confirmation_Letter.pdf specifies 20 November 2029" in summary
+    assert "03_Agreement_for_Sale_B904.pdf stipulates 28 February 2030" in summary
+    assert "05_Maple_Heights_Project_Brochure.pdf" not in summary
+
+    # 6. Derived Grace Period (6 months)
+    ev_grace = next(e for e in events if "Grace Period" in e.title)
+    assert ev_grace.eventDate == "2030-08-28"
+    assert ev_grace.isDerived is True
+    assert ev_grace.sourceDocument == "03_Agreement_for_Sale_B904.pdf"
+
+    # 7. Discrepancy Evaluator test
+    possession_evaluator = PossessionDiscrepancyEvaluator()
+    findings = possession_evaluator.evaluate("tx-84ef0c8e", bundle.documents, bundle.extracted_attributes)
+    assert len(findings) == 1, f"Expected 1 possession finding (Allotment vs Agreement), got {len(findings)}"
+    assert findings[0].title == "Promised Possession Date Shift"
+    assert "02_Allotment_Confirmation_Letter.pdf" in findings[0].description
+    assert "03_Agreement_for_Sale_B904.pdf" in findings[0].description
+    assert "05_Maple_Heights_Project_Brochure.pdf" not in findings[0].description
+
+    # 8. Area Discrepancy Evaluator test
+    area_evaluator = AreaDiscrepancyEvaluator()
+    area_findings = area_evaluator.evaluate("tx-84ef0c8e", bundle.documents, bundle.extracted_attributes)
+    assert len(area_findings) == 1
+    assert "1,145" in area_findings[0].description
+    assert "1,080" in area_findings[0].description
+
+
+# ==============================================================================
+# 10. COMPLETELY NOVEL SYNTHETIC REAL ESTATE TRANSACTION (Section 15)
+# ==============================================================================
+
+@pytest.mark.asyncio
+async def test_completely_novel_synthetic_transaction():
+    """
+    Validates Section 15 with entirely novel, unseen project facts:
+    - Project: Solaria Grand Residences
+    - Developer: Vanguard Realty & Infrastructure Ltd.
+    - Location: Chennai, Tamil Nadu
+    - Unit: Tower D, Flat D-1402
+    - Marketing: 2031 (YEAR precision)
+    - Allotment Slip: 15 August 2031 (DAY precision)
+    - Sale Contract: 31 December 2031 (DAY precision)
+    - Grace Period: 6 months -> 2032-06-30 (derived)
+    """
+    ts = TimelineService()
+
+    doc_mkt = Document(id="doc-sol-01", bundle_id="tx-solaria-01", file_name="Solaria_Launch_Prospectus.pdf", document_type="PROJECT_BROCHURE")
+    doc_allot = Document(id="doc-sol-02", bundle_id="tx-solaria-01", file_name="Solaria_Allotment_Slip.pdf", document_type="ALLOTMENT_LETTER")
+    doc_sale = Document(id="doc-sol-03", bundle_id="tx-solaria-01", file_name="Solaria_Registered_Sale_Contract.pdf", document_type="SALE_AGREEMENT")
+
+    bundle = TransactionBundle(
+        id="tx-solaria-01",
+        title="Solaria Grand Residences — Tower D, Flat D-1402",
+        project="Solaria Grand Residences",
+        developer="Vanguard Realty & Infrastructure Ltd.",
+        location="Chennai, Tamil Nadu",
+        unit="Tower D, Flat D-1402",
+        sale_price=16_550_000.0,
+        possession_date="2031-12-31",
+        grace_period_months=6,
+    )
+    bundle.documents = [doc_mkt, doc_allot, doc_sale]
+    bundle.extracted_attributes = [
+        ExtractedAttribute(id="at-sol-1", bundle_id="tx-solaria-01", document_id="doc-sol-01", attribute_key="possession_date", attribute_value="target 2031 handover", normalized_value="2031", unit="date:YEAR", source_page=1),
+        ExtractedAttribute(id="at-sol-2", bundle_id="tx-solaria-01", document_id="doc-sol-02", attribute_key="possession_date", attribute_value="15 August 2031", normalized_value="2031-08-15", unit="date:DAY", source_page=2),
+        ExtractedAttribute(id="at-sol-3", bundle_id="tx-solaria-01", document_id="doc-sol-03", attribute_key="possession_date", attribute_value="31 December 2031", normalized_value="2031-12-31", unit="date:DAY", source_page=12),
+    ]
+
+    events, summary = ts._build_dynamic_timeline_events(bundle, 16_550_000.0)
+
+    # 1. Marketing event: 2031, YEAR precision, conflictingDate is None (2031 aligns with 2031-08-15)
+    ev_mkt = next(e for e in events if e.documentName == "Solaria_Launch_Prospectus.pdf")
+    assert ev_mkt.eventDate == "2031"
+    assert ev_mkt.precision == "YEAR"
+    assert ev_mkt.conflictingDate is None
+
+    # 2. Allotment event: 2031-08-15, conflicts with Contract (2031-12-31)
+    ev_allot = next(e for e in events if e.documentName == "Solaria_Allotment_Slip.pdf")
+    assert ev_allot.eventDate == "2031-08-15"
+    assert ev_allot.conflictingDate == "2031-12-31"
+    assert "disparity" in ev_allot.conflictDetails
+
+    # 3. Contract event: 2031-12-31, conflicts with Allotment (2031-08-15)
+    ev_contract = next(e for e in events if e.documentName == "Solaria_Registered_Sale_Contract.pdf" and e.dateType == "CONTRACTUAL")
+    assert ev_contract.eventDate == "2031-12-31"
+    assert ev_contract.conflictingDate == "2031-08-15"
+
+    # 4. Grace period derived event (6 months from 2031-12-31)
+    ev_grace = next(e for e in events if "Grace Period" in e.title)
+    assert ev_grace.eventDate == "2032-06-30"
+    assert ev_grace.isDerived is True
+    assert ev_grace.sourceDocument == "Solaria_Registered_Sale_Contract.pdf"
+
+    # 5. Isolation verification: none of the demo identifiers appear
+    dump_str = str([e.dict() for e in events]) + (summary or "")
+    for forbidden in ["SkyView", "Harbor Crest", "Maple Heights", "Test Residency", "A-1204", "B-904", "C-1708"]:
+        assert forbidden not in dump_str, f"Found leaked demo term {forbidden} in novel transaction timeline"
+
+
+# ==============================================================================
+# 11. EXHAUSTIVE DATE EDGE CASES & ANTI-HALLUCINATION (Section 16)
+# ==============================================================================
+
+def test_exhaustive_date_edge_cases_and_anti_hallucination():
+    """
+    Tests edge cases from Section 16:
+    - year-only date
+    - month/year date
+    - exact date
+    - vague marketing promise
+    - conflicting exact dates
+    - compatible year + exact date
+    - derived grace-period date
+    - multiple date formats
+    - negation awareness
+    """
+    # 1. Multiple date formats
+    date_cases = [
+        ("15-Aug-2029", ("2029-08-15", "DAY")),
+        ("15/08/2029", ("2029-08-15", "DAY")),
+        ("2029-08-15", ("2029-08-15", "DAY")),
+        ("August 15, 2029", ("2029-08-15", "DAY")),
+        ("15th day of August 2029", ("2029-08-15", "DAY")),
+        ("August 2029", ("2029-08", "MONTH")),
+        ("08/2029", ("2029-08", "MONTH")),
+        ("target 2029 handover", ("2029", "YEAR")),
+        ("handover by 2030", ("2030", "YEAR")),
+    ]
+    for raw, expected in date_cases:
+        norm = DateNormalizer.normalize_with_precision(raw)
+        assert norm == expected, f"Failed for {raw}: got {norm}, expected {expected}"
+
+    # 2. Negation filtering
+    negated_texts = [
+        "This brochure does not state the contractual possession date of 28 February 2030",
+        "The reservation record does not specify a completion date of 31 December 2029",
+        "Omitted contractual date: omits 30 June 2028 from initial brochure",
+        "The promoter will not commit to handover by 15 November 2029 without town approvals",
+    ]
+    for text in negated_texts:
+        assert DateNormalizer.is_negated_context(text) is True, f"Failed to detect negation in: {text}"
+
+    # 3. Affirmative descriptions with precision qualifiers must NOT be marked negated
+    affirmative_texts = [
+        "The project is marketed with a target handover during 2029. No exact day or month is specified in this brochure.",
+        "Expected possession date recorded in this allotment letter is 20 November 2029.",
+        "Developer shall offer possession on or before 28 February 2030.",
+    ]
+    for text in affirmative_texts:
+        assert DateNormalizer.is_negated_context(text) is False, f"False positive negation in: {text}"
+
+
+

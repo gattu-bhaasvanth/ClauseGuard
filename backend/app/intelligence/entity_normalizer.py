@@ -174,6 +174,18 @@ class DateNormalizer:
         "december": 12, "dec": 12,
     }
 
+    NEGATION_PATTERN = re.compile(
+        r"\b(?:does\s+not|do\s+not|did\s+not|will\s+not|cannot|not\s+state|not\s+specify|not\s+provide|not\s+mention|not\s+promise|not\s+commit|omits?|omitted|excluding|without\s+(?:any\s+)?(?:commitment|liability|guarantee|warranty))\b",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def is_negated_context(cls, text: Optional[str]) -> bool:
+        """Returns True if the surrounding text/prefix indicates that a fact is omitted, disclaimed, or negated."""
+        if not text:
+            return False
+        return bool(cls.NEGATION_PATTERN.search(text))
+
     # Matches: "31st December 2027", "30 June 2027", "18th day of September 2026", "31-Dec-2027"
     TEXTUAL_DATE = re.compile(
         r"(\d{1,2})(?:st|nd|rd|th)?(?:\s+day\s+of)?[\s\-]+([A-Za-z]+)[,\s\-]+(\d{4})",
@@ -200,9 +212,9 @@ class DateNormalizer:
     MONTH_NUMERIC_YEAR = re.compile(
         r"\b(0?[1-9]|1[0-2])[\/\-](\d{4})\b"
     )
-    # Matches standalone valid transaction year e.g. 2026, 2027, 2028, 2030
+    # Matches standalone valid transaction year e.g. 1990 - 2099
     STANDALONE_YEAR = re.compile(
-        r"\b(20[2-3]\d)\b"
+        r"\b(19\d{2}|20\d{2})\b"
     )
 
     @classmethod
@@ -210,15 +222,22 @@ class DateNormalizer:
         """
         Returns (normalized_date_str, precision) where precision is 'DAY', 'MONTH', or 'YEAR'.
         Guarantees that a year-only date is never artificially converted into an exact day.
+        Skips matches that are explicitly negated or disclaimed in the preceding context.
         """
         if not raw:
             return None
 
         clean_raw = raw.strip()
 
+        # Helper to check if a regex match in clean_raw is negated
+        def is_match_negated(m) -> bool:
+            prefix = clean_raw[max(0, m.start() - 100):m.start()]
+            return cls.is_negated_context(prefix)
+
         # 1. Check ISO (YYYY-MM-DD) -> DAY precision
-        m_iso = cls.ISO_DATE.search(clean_raw)
-        if m_iso:
+        for m_iso in cls.ISO_DATE.finditer(clean_raw):
+            if is_match_negated(m_iso):
+                continue
             y, m, d = int(m_iso.group(1)), int(m_iso.group(2)), int(m_iso.group(3))
             try:
                 dt = datetime(y, m, d)
@@ -227,8 +246,9 @@ class DateNormalizer:
                 pass
 
         # 2. Check textual date "31st December 2027" -> DAY precision
-        m_text = cls.TEXTUAL_DATE.search(clean_raw)
-        if m_text:
+        for m_text in cls.TEXTUAL_DATE.finditer(clean_raw):
+            if is_match_negated(m_text):
+                continue
             d_str, month_str, y_str = m_text.group(1), m_text.group(2).lower(), m_text.group(3)
             if month_str in cls.MONTHS:
                 m_num = cls.MONTHS[month_str]
@@ -239,8 +259,9 @@ class DateNormalizer:
                     pass
 
         # 3. Check textual date reverse "December 31, 2027" -> DAY precision
-        m_rev = cls.TEXTUAL_DATE_REV.search(clean_raw)
-        if m_rev:
+        for m_rev in cls.TEXTUAL_DATE_REV.finditer(clean_raw):
+            if is_match_negated(m_rev):
+                continue
             month_str, d_str, y_str = m_rev.group(1).lower(), m_rev.group(2), m_rev.group(3)
             if month_str in cls.MONTHS:
                 m_num = cls.MONTHS[month_str]
@@ -251,8 +272,9 @@ class DateNormalizer:
                     pass
 
         # 4. Check DD/MM/YYYY -> DAY precision
-        m_num = cls.NUMERIC_DATE_IN.search(clean_raw)
-        if m_num:
+        for m_num in cls.NUMERIC_DATE_IN.finditer(clean_raw):
+            if is_match_negated(m_num):
+                continue
             d_val, m_val, y_val = int(m_num.group(1)), int(m_num.group(2)), int(m_num.group(3))
             try:
                 dt = datetime(y_val, m_val, d_val)
@@ -261,20 +283,23 @@ class DateNormalizer:
                 pass
 
         # 5. Check Month + Year "June 2027" -> MONTH precision
-        m_my = cls.MONTH_YEAR_DATE.search(clean_raw)
-        if m_my:
+        for m_my in cls.MONTH_YEAR_DATE.finditer(clean_raw):
+            if is_match_negated(m_my):
+                continue
             month_str, y_str = m_my.group(1).lower(), m_my.group(2)
             if month_str in cls.MONTHS:
                 return (f"{y_str}-{cls.MONTHS[month_str]:02d}", "MONTH")
 
-        m_mny = cls.MONTH_NUMERIC_YEAR.search(clean_raw)
-        if m_mny:
+        for m_mny in cls.MONTH_NUMERIC_YEAR.finditer(clean_raw):
+            if is_match_negated(m_mny):
+                continue
             m_val, y_val = int(m_mny.group(1)), int(m_mny.group(2))
             return (f"{y_val}-{m_val:02d}", "MONTH")
 
         # 6. Check Year-only "target 2027 handover" -> YEAR precision
-        m_y = cls.STANDALONE_YEAR.search(clean_raw)
-        if m_y:
+        for m_y in cls.STANDALONE_YEAR.finditer(clean_raw):
+            if is_match_negated(m_y):
+                continue
             return (m_y.group(1), "YEAR")
 
         return None

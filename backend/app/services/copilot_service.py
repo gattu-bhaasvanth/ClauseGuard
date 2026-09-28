@@ -20,6 +20,7 @@ from app.services.transaction_intelligence_orchestrator import (
     transaction_intelligence_orchestrator,
     format_currency_inr,
 )
+from app.intelligence.entity_normalizer import DateNormalizer
 
 
 REFUSAL_MESSAGE = (
@@ -387,23 +388,36 @@ class TransactionCopilotService:
         else:
             # Dynamic date synthesis for custom transactions
             doc_map = {d.id: d for d in bundle.documents}
-            possession_attrs = [a for a in bundle.extracted_attributes if a.attribute_key == "possession_date"]
-            
+            possession_attrs = [
+                a for a in bundle.extracted_attributes
+                if a.attribute_key == "possession_date" and not DateNormalizer.is_negated_context(a.raw_excerpt)
+            ]
+
+            # Deduplicate per document, keeping the best non-negated attribute
+            doc_attrs = {}
+            for a in possession_attrs:
+                if a.document_id not in doc_attrs:
+                    doc_attrs[a.document_id] = a
+                else:
+                    existing = doc_attrs[a.document_id]
+                    if (a.source_clause and not existing.source_clause) or (a.confidence > existing.confidence):
+                        doc_attrs[a.document_id] = a
+
             bullets = []
             citations = []
             seen_docs = set()
-            for attr in possession_attrs:
+            for attr in doc_attrs.values():
                 doc = doc_map.get(attr.document_id)
                 doc_name = doc.file_name if doc else "Document"
                 if doc_name in seen_docs:
                     continue
                 seen_docs.add(doc_name)
-                
-                prec = attr.unit.replace("date:", "") if (attr.unit and attr.unit.startswith("date:")) else ("YEAR" if len(attr.normalized_value or "") == 4 else "DAY")
+
+                prec = getattr(attr, "precision", None) or (attr.unit.replace("date:", "") if (attr.unit and attr.unit.startswith("date:")) else ("YEAR" if len(attr.normalized_value or "") == 4 else "DAY"))
                 display_date = attr.attribute_value or attr.normalized_value
                 if prec == "YEAR":
                     bullets.append(f"• **{doc_name}**: Target handover year **{display_date}** (exact day not specified in promotional copy).")
-                elif prec == "MONTH":
+                elif prec in ("MONTH", "MONTH_YEAR"):
                     bullets.append(f"• **{doc_name}**: Projected handover month **{display_date}**.")
                 else:
                     bullets.append(f"• **{doc_name}**: Handover deadline specified as **{display_date}**.")
